@@ -7,25 +7,25 @@ cd "$ROOT"
 BRANCH="${XINTEL_SIGNALS_BRANCH:-xintel/signals}"
 REMOTE="${XINTEL_SIGNALS_REMOTE:-origin}"
 
-# Collect non-test decision files
-mapfile -t FILES < <(find data/decisions -maxdepth 1 -type f -name '*.json' ! -name '.gitkeep' | sort)
-if [[ ${#FILES[@]} -eq 0 ]]; then
-  echo "no decision json to publish"
-  exit 0
-fi
+# Collect decision files (may be empty — README-only publish still allowed)
+mapfile -t FILES < <(find data/decisions -maxdepth 1 -type f -name '*.json' ! -name '.gitkeep' | sort || true)
 
-# Skip pure pipe_check-only publishes unless FORCE_PUBLISH_TESTS=1
+# Skip test/shadow artifacts unless FORCE_PUBLISH_TESTS=1
+# Retired: calibration_shadow | shadow_only | pipe_check | PIPECHECK
 PUB=()
-for f in "${FILES[@]}"; do
-  if grep -q 'pipe_check\|"PIPECHECK"' "$f" 2>/dev/null && [[ "${FORCE_PUBLISH_TESTS:-0}" != "1" ]]; then
-    echo "skip test artifact $f"
-    continue
+for f in "${FILES[@]:-}"; do
+  [[ -z "${f:-}" ]] && continue
+  if [[ "${FORCE_PUBLISH_TESTS:-0}" != "1" ]]; then
+    if grep -qE 'pipe_check|"PIPECHECK"|calibration_shadow|shadow_only' "$f" 2>/dev/null; then
+      echo "skip test/shadow artifact $f"
+      continue
+    fi
   fi
   PUB+=("$f")
 done
+
 if [[ ${#PUB[@]} -eq 0 ]]; then
-  echo "nothing non-test to publish"
-  exit 0
+  echo "no real decision json to publish — will still sync README if changed"
 fi
 
 TMP=$(mktemp -d)
@@ -41,10 +41,11 @@ fi
 
 mkdir -p "$TMP/wt/data/decisions"
 cp data/decisions/README.md "$TMP/wt/data/decisions/README.md" 2>/dev/null || true
-for f in "${PUB[@]}"; do
+for f in "${PUB[@]:-}"; do
+  [[ -z "${f:-}" ]] && continue
   cp "$f" "$TMP/wt/data/decisions/"
 done
-# keep inbox optional
+# keep inbox optional (skip if only shadow lines — copy as-is; consumers filter flags)
 [[ -f data/decisions/inbox.jsonl ]] && cp data/decisions/inbox.jsonl "$TMP/wt/data/decisions/" || true
 
 cd "$TMP/wt"
@@ -55,4 +56,12 @@ if git diff --cached --quiet; then
 fi
 git -c user.email="xintel-bot@local" -c user.name="xintel-publisher" commit -m "xintel: publish decisions $(date -u +%Y-%m-%dT%H:%MZ)"
 git push -u "$REMOTE" "$BRANCH"
+SHA="$(git rev-parse HEAD)"
 echo "published to $REMOTE/$BRANCH"
+echo "commit_sha=$SHA"
+echo "contents_api_url=https://api.github.com/repos/jacobcr96-ops/0xbot/contents/data/decisions/README.md?ref=${BRANCH}"
+for f in "${PUB[@]:-}"; do
+  [[ -z "${f:-}" ]] && continue
+  name="$(basename "$f")"
+  echo "contents_api_url=https://api.github.com/repos/jacobcr96-ops/0xbot/contents/data/decisions/${name}?ref=${BRANCH}"
+done

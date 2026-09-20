@@ -50,8 +50,8 @@ class DexScreenerNewSource:
         try:
             return self._poll_live()
         except Exception as e:  # noqa: BLE001 — discovery must not crash runner
-            log.warning("dexscreener_new live poll failed: %s", e)
-            return self._poll_fixture()
+            log.warning("dexscreener_new live poll failed: %s — no fixture fallback in live mode", e)
+            return []
 
     def _poll_fixture(self) -> list[DiscoveryEvent]:
         path = self._fixture_path()
@@ -77,17 +77,20 @@ class DexScreenerNewSource:
     def _poll_live(self) -> list[DiscoveryEvent]:
         events: list[DiscoveryEvent] = []
         for url in (TOKEN_PROFILES_URL, TOKEN_BOOSTS_URL):
+            is_boost = url == TOKEN_BOOSTS_URL
             req = Request(url, headers={"User-Agent": "x-intel-discovery/0.1"})
             with urlopen(req, timeout=self.timeout_s) as resp:  # noqa: S310 — public API
                 payload = json.loads(resp.read().decode("utf-8"))
             rows = payload if isinstance(payload, list) else []
             for r in rows:
-                ev = self._profile_to_event(r)
+                ev = self._profile_to_event(r, from_boost=is_boost)
                 if ev:
                     events.append(ev)
         return events
 
-    def _profile_to_event(self, r: dict[str, Any]) -> Optional[DiscoveryEvent]:
+    def _profile_to_event(
+        self, r: dict[str, Any], *, from_boost: bool = False
+    ) -> Optional[DiscoveryEvent]:
         chain_id = str(r.get("chainId") or r.get("chain") or "").lower()
         chain = CHAIN_MAP.get(chain_id, chain_id)
         if chain not in self.chains:
@@ -96,6 +99,10 @@ class DexScreenerNewSource:
         if not ca:
             return None
         now = datetime.now(timezone.utc)
+        hints: dict[str, Any] = {"dexscreener": True, "thin_dex_new": True}
+        if from_boost:
+            hints["boost_only"] = True
+            hints["paid_boost"] = True
         return DiscoveryEvent(
             source=self.source_id,
             discovered_at=now,
@@ -105,8 +112,8 @@ class DexScreenerNewSource:
             raw_ref=r.get("url") or r.get("description") or url_safe(r),
             mc_usd=_f(r.get("mc_usd") or r.get("marketCap")),
             liquidity_usd=_f(r.get("liquidity_usd")),
-            event_kind="new_profile",
-            confidence_hints={"dexscreener": True},
+            event_kind="boost" if from_boost else "new_profile",
+            confidence_hints=hints,
         )
 
     def _row_to_event(self, r: dict[str, Any]) -> Optional[DiscoveryEvent]:
@@ -131,7 +138,7 @@ class DexScreenerNewSource:
             liquidity_usd=_f(r.get("liquidity_usd") or _nested(r, "liquidity", "usd")),
             pair_created_at=pair_created,
             event_kind=r.get("event_kind") or "new_pair",
-            confidence_hints=dict(r.get("confidence_hints") or {"dexscreener": True}),
+            confidence_hints=dict(r.get("confidence_hints") or {"dexscreener": True, "thin_dex_new": True}),
         )
 
 

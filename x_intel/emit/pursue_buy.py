@@ -95,7 +95,8 @@ def _normalize_evidence(candidate: CandidateV1) -> list[EvidenceItem]:
     now = datetime.now(timezone.utc)
     for raw in candidate.evidence or []:
         if isinstance(raw, EvidenceItem):
-            items.append(raw)
+            # Force refs=[] even when copying typed items
+            items.append(raw.model_copy(update={"refs": []}))
             continue
         if not isinstance(raw, dict):
             continue
@@ -119,7 +120,7 @@ def _normalize_evidence(candidate: CandidateV1) -> list[EvidenceItem]:
                 channel=channel,  # type: ignore[arg-type]
                 summary=str(raw.get("summary") or ""),
                 observed_at=obs,
-                refs=raw.get("refs"),
+                refs=[],  # handoff contract: always [] never null/populated
                 weight=raw.get("weight"),
             )
         )
@@ -150,6 +151,68 @@ def check_pursue_buy_gates(
     evidence = _normalize_evidence(candidate)
     if not evidence:
         raise GateReject("multi-channel evidence empty")
+
+    # --- Publish-quality gate (age+MC alone is not enough) ---
+    sources = [s for s in (candidate.source_accounts or []) if s]
+    hints: dict[str, Any] = {}
+    extra = getattr(candidate, "__pydantic_extra__", None) or {}
+    disc = extra.get("discovery") or {}
+    if isinstance(disc, dict):
+        for k in ("first_source", "sources", "gate_reasons", "gate_warnings"):
+            if k in disc and k not in hints:
+                hints[k] = disc[k]
+        src_from_disc = disc.get("sources") or []
+        if isinstance(src_from_disc, list) and src_from_disc:
+            sources = list(dict.fromkeys([*sources, *[str(s) for s in src_from_disc]]))
+    fs = candidate.feature_scores
+    if fs is not None and fs.scores:
+        for fid, entry in fs.scores.items():
+            hints[fid] = entry.value
+    # evidence channels as soft sources
+    channels = {e.channel for e in evidence}
+    if "x_social" in channels and "x_social" not in sources:
+        sources.append("x_social")
+    if "onchain_flow" in channels and "flow_hint" not in sources:
+        sources.append("flow_hint")
+
+    organic_x = ("x_social" in sources or hints.get("x_social") is True) and not (
+        hints.get("boost_only") is True or hints.get("paid_boost") is True
+    )
+    flow_pos = False
+    if "flow_hint" in sources or hints.get("flow_hint") is True:
+        if hints.get("sybil") is not True and hints.get("D1") is not True:
+            fbc = hints.get("first_buyer_count")
+            if hints.get("flow_positive") is True or hints.get("sybil") is False:
+                flow_pos = True
+            elif isinstance(fbc, (int, float)) and fbc > 0:
+                flow_pos = True
+    intel_pass = (
+        hints.get("multi_channel_pass") is True
+        or hints.get("S1") is True
+        or hints.get("S3") is True
+        or len({s for s in sources if s in {"x_social", "flow_hint", "pumpfun_curve"}}) >= 2
+    )
+    quality = organic_x or flow_pos or intel_pass
+
+    if hints.get("parasite_of_runner") is True or hints.get("parasite") is True:
+        raise GateReject("parasite_only — no emit")
+    if (hints.get("boost_only") is True or hints.get("paid_boost") is True) and not quality:
+        raise GateReject("boost_only_no_organic — no emit")
+    non_lag = {s for s in sources if s and s != "fomo_sidebar"}
+    if (hints.get("thin_dex_new") is True or (non_lag and non_lag <= {"dexscreener_new"})) and not quality:
+        raise GateReject("thin_dex_new_only — no emit")
+    if not quality:
+        raise GateReject(
+            "publish quality missing — need organic X, positive flow, or multi-channel intel"
+        )
+
+    # Late / post-move must never emit BUY
+    window = _window_type(candidate)
+    s2 = _feature_value(candidate, "S2")
+    if s2 == "late_challenger" and window != "frenzy-lane":
+        raise GateReject("post_move_not_early / S2=late_challenger — no BUY emit")
+    if hints.get("post_move_not_early") is True:
+        raise GateReject("post_move_not_early — no BUY emit")
 
     mc = candidate.mc_usd_at_first_sight
     # Prefer detection MC if present as extra
@@ -228,7 +291,7 @@ def pursue_candidate_to_buy(
         ticker=candidate.ticker,
         confidence=confidence,
         thesis=thesis
-        or f"pursue→BUY stub for {candidate.ticker or candidate.contract_address[:8]}",
+        or f"pursue→BUY {candidate.ticker or candidate.contract_address[:8]} (quality gate pass)",
         sizing_intent=SizingIntent(
             mode="percent_equity",
             value=max(float(percent_equity), float(MIN_BUY_PERCENT_EQUITY)),
@@ -240,7 +303,7 @@ def pursue_candidate_to_buy(
             as_of=candidate.first_seen_at,
         ),
         evidence=evidence,
-        risk_flags=["pursue_buy_emitter", "v0_soft_gates"],
+        risk_flags=["pursue_buy_emitter", "publish_quality_pass"],
         experiment_id=candidate.experiment_id,
         candidate_id=str(candidate.candidate_id),
         do_not_execute_until_armed=armed_flag,
@@ -273,6 +336,18 @@ def emit_pursue_buy(
             cand = loaded
 
     decision, _warns = pursue_candidate_to_buy(cand, **kwargs)
+    banned = {"calibration_shadow", "shadow_only", "pipe_check", "PIPECHECK", "post_move_not_early"}
+    if banned.intersection(decision.risk_flags or []):
+        raise GateReject(
+            f"refusing emit with retired/shadow risk_flags: {sorted(banned.intersection(decision.risk_flags))}"
+        )
+    # Ensure refs always []
+    decision = decision.model_copy(
+        update={
+            "evidence": [e.model_copy(update={"refs": []}) for e in decision.evidence],
+            "risk_flags": [f for f in (decision.risk_flags or []) if f not in banned],
+        }
+    )
     if persist:
         path = led.save_decision(decision)
         log.info(

@@ -24,7 +24,10 @@ def _load_repo_env() -> None:
                 continue
             k, _, v = line.partition("=")
             k, v = k.strip(), v.strip().strip('"').strip("'")
-            if k and k not in os.environ:
+            if not k:
+                continue
+            # .env is source of truth for arming; always apply XINTEL_* from file.
+            if k.startswith("XINTEL_") or k not in os.environ:
                 os.environ[k] = v
     except OSError:
         pass

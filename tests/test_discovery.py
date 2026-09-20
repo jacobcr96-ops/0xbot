@@ -200,13 +200,39 @@ def test_score_watch_band():
     old = datetime.now(timezone.utc) - timedelta(minutes=90)
     rec, _ = rec_bus.upsert(
         _evt(
+            source="pumpfun_curve",
             discovered_at=old,
             pair_created_at=old,
             mc_usd=100_000,
+            confidence_hints={"pump_curve": True},
         )
     )
     gate = score_discovery(rec)
     assert gate.decision == CandidateDecision.watch
+
+
+def test_thin_dex_only_rejects():
+    rec_bus = DiscoveryBus()
+    rec, _ = rec_bus.upsert(_evt(confidence_hints={"thin_dex_new": True}))
+    gate = score_discovery(rec)
+    assert gate.decision == CandidateDecision.reject
+    assert "thin_dex_new_only" in gate.reasons
+    assert gate.pursue_eligible is False
+
+
+def test_age_mc_pursue_without_quality_not_eligible():
+    """Age+MC alone can pursue for research but must not be emit-eligible."""
+    rec_bus = DiscoveryBus()
+    rec, _ = rec_bus.upsert(
+        _evt(
+            source="pumpfun_curve",
+            confidence_hints={"pump_curve": True},
+        )
+    )
+    gate = score_discovery(rec)
+    assert gate.decision == CandidateDecision.pursue
+    assert gate.pursue_eligible is False
+    assert "age_mc_without_quality_evidence" in gate.reasons
 
 
 def test_validate_report_generation(tmp_path: Path):

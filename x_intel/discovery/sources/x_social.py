@@ -40,9 +40,12 @@ class XSocialSource:
         self.ingest = ingest
 
     def poll(self) -> list[DiscoveryEvent]:
-        # Prefer dedicated discovery fixture when present
+        # Live mode: only real X ingest (MCP/keys) — never bleed fixtures into live cycles
+        if self.live and self.ingest is None:
+            return []
+        # Prefer dedicated discovery fixture when present (replay/tests)
         path = self._fixture_path()
-        if path and path.is_file():
+        if path and path.is_file() and not self.live:
             return self._from_fixture_file(path)
         # Fall back to wrapping FixtureIngest candidate replay
         try:
@@ -94,6 +97,11 @@ class XSocialSource:
         discovered = _parse_dt(r.get("discovered_at") or r.get("created_at")) or datetime.now(
             timezone.utc
         )
+        hints = dict(r.get("confidence_hints") or {"x_social": True})
+        # Paid airdrop-shill templates are not organic X evidence
+        if re.search(r"\bcrypto airdrop\b|\bairdrop\b.*\b(memecoin|token)\b", text, re.I):
+            hints["airdrop_farm"] = True
+            hints["organic_x"] = False
         return DiscoveryEvent(
             source=self.source_id,
             discovered_at=discovered,
@@ -103,7 +111,7 @@ class XSocialSource:
             raw_ref=r.get("raw_ref") or r.get("post_id") or r.get("url"),
             mc_usd=_f(r.get("mc_usd")),
             event_kind="x_ca_mention",
-            confidence_hints=dict(r.get("confidence_hints") or {"x_social": True}),
+            confidence_hints=hints,
         )
 
     def _from_ingest_row(self, r: dict[str, Any]) -> Optional[DiscoveryEvent]:

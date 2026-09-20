@@ -41,8 +41,8 @@ class PumpfunCurveSource:
         try:
             return self._poll_live()
         except Exception as e:  # noqa: BLE001
-            log.warning("pumpfun_curve live poll failed: %s", e)
-            return self._poll_fixture()
+            log.warning("pumpfun_curve live poll failed: %s — no fixture fallback in live mode", e)
+            return []
 
     def _fixture_path(self) -> Optional[Path]:
         if self.fixture_dir:
@@ -70,7 +70,80 @@ class PumpfunCurveSource:
         return out
 
     def _poll_live(self) -> list[DiscoveryEvent]:
-        """Best-effort: DexScreener search for recent pump.fun pairs."""
+        """Best-effort live curve poll.
+
+        Prefer public pump.fun coins feed for truly new mints; fall back to
+        DexScreener search filtered to early age. Never invent market data.
+        """
+        try:
+            events = self._poll_live_pumpfun_api()
+            if events:
+                return events
+        except Exception as e:  # noqa: BLE001
+            log.warning("pumpfun_curve pump.fun API failed: %s", e)
+        try:
+            return self._poll_live_dex()
+        except Exception as e:  # noqa: BLE001
+            log.warning("pumpfun_curve dex live failed: %s", e)
+            return []
+
+    def _poll_live_pumpfun_api(self) -> list[DiscoveryEvent]:
+        """Public pump.fun coins feed — real mint/MC/created_timestamp only."""
+        url = (
+            "https://frontend-api-v3.pump.fun/coins"
+            "?offset=0&limit=50&sort=created_timestamp&order=DESC&includeNsfw=false"
+        )
+        req = Request(url, headers={"User-Agent": "x-intel-discovery/0.1"})
+        with urlopen(req, timeout=self.timeout_s) as resp:  # noqa: S310
+            rows = json.loads(resp.read().decode("utf-8"))
+        if not isinstance(rows, list):
+            return []
+        events: list[DiscoveryEvent] = []
+        now = datetime.now(timezone.utc)
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            ca = (r.get("mint") or "").strip()
+            if not ca:
+                continue
+            created_ms = r.get("created_timestamp")
+            pair_created = None
+            if created_ms is not None:
+                try:
+                    ts = float(created_ms)
+                    if ts > 1e12:
+                        ts /= 1000.0
+                    pair_created = datetime.fromtimestamp(ts, tz=timezone.utc)
+                except (TypeError, ValueError, OSError):
+                    pair_created = None
+            usd_mc = r.get("usd_market_cap") or r.get("market_cap")
+            prog = r.get("bonding_curve_progress") or r.get("progress")
+            complete = r.get("complete")
+            kind = "graduate" if complete is True else "curve_new"
+            events.append(
+                DiscoveryEvent(
+                    source=self.source_id,
+                    discovered_at=now,
+                    chain="solana",
+                    ca=ca,
+                    ticker=r.get("symbol") or r.get("name"),
+                    raw_ref=f"https://pump.fun/{ca}",
+                    mc_usd=float(usd_mc) if usd_mc is not None else None,
+                    liquidity_usd=None,
+                    curve_progress=float(prog) if prog is not None else (1.0 if complete else None),
+                    pair_created_at=pair_created,
+                    event_kind=kind,
+                    confidence_hints={
+                        "pump_curve": True,
+                        "pumpfun_api": True,
+                        "complete": complete,
+                    },
+                )
+            )
+        log.info("pumpfun_curve pump.fun API → %d events", len(events))
+        return events
+
+    def _poll_live_dex(self) -> list[DiscoveryEvent]:
         url = DEX_SEARCH.format(q=quote("pump.fun"))
         req = Request(url, headers={"User-Agent": "x-intel-discovery/0.1"})
         with urlopen(req, timeout=self.timeout_s) as resp:  # noqa: S310
@@ -89,9 +162,13 @@ class PumpfunCurveSource:
             pair_created = None
             if created_ms:
                 pair_created = datetime.fromtimestamp(float(created_ms) / 1000.0, tz=timezone.utc)
+            # Skip stale dex search hits (not early-mover)
+            if pair_created is not None:
+                age_m = (now - pair_created).total_seconds() / 60.0
+                if age_m > 180:
+                    continue
             liq = (p.get("liquidity") or {}).get("usd")
             mc = p.get("marketCap") or p.get("fdv")
-            # Heuristic graduation: raydium dexId after pump
             dex_id = str(p.get("dexId") or "").lower()
             kind = "graduate" if dex_id in {"raydium", "pumpswap"} and ca.endswith("pump") else "curve_new"
             events.append(

@@ -130,6 +130,91 @@ def _farm_domain_hit(rec: DiscoveryRecord) -> bool:
     return False
 
 
+
+# Sources that alone do not justify a published BUY (thin / paid / lagging).
+THIN_OR_PAID_SOURCES = frozenset({"dexscreener_new", "fomo_sidebar"})
+QUALITY_SOURCES = frozenset({"x_social", "flow_hint", "pumpfun_curve"})
+
+# risk_flags / hint keys that must never ride a real BUY emit
+RETIRED_SHADOW_FLAGS = frozenset(
+    {"calibration_shadow", "shadow_only", "pipe_check", "PIPECHECK", "post_move_not_early"}
+)
+
+
+def _sources(rec: DiscoveryRecord) -> list[str]:
+    return [s for s in (rec.sources or []) if s]
+
+
+def _organic_x_evidence(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
+    """Organic X evidence (not boost-only / paid-boost)."""
+    if "x_social" not in _sources(rec) and not hints.get("x_social"):
+        return False
+    if hints.get("boost_only") is True or hints.get("paid_boost") is True:
+        return False
+    if hints.get("organic_x") is False:
+        return False
+    return True
+
+
+def _first_buyer_flow_positive(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
+    """Positive first-buyer / flow desk signal (non-sybil)."""
+    has_flow = "flow_hint" in _sources(rec) or hints.get("flow_hint") is True
+    if not has_flow:
+        return False
+    if hints.get("sybil") is True or hints.get("D1") is True:
+        return False
+    if hints.get("flow_positive") is True:
+        return True
+    fbc = hints.get("first_buyer_count")
+    if isinstance(fbc, (int, float)) and fbc > 0:
+        return True
+    # Explicit non-sybil flow hint counts as positive when no counter-signal
+    if hints.get("sybil") is False:
+        return True
+    cluster = hints.get("cluster_score")
+    if isinstance(cluster, (int, float)) and cluster < 0.5:
+        return True
+    return False
+
+
+def _multi_channel_intel_pass(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
+    """Explicit multi-channel pass from intel (S1/S3 or dedicated flag)."""
+    if hints.get("multi_channel_pass") is True:
+        return True
+    if hints.get("S1") is True or hints.get("S3") is True:
+        return True
+    # Two+ quality channels present (X + flow, X + curve, flow + curve, …)
+    qs = [s for s in _sources(rec) if s in QUALITY_SOURCES]
+    return len(set(qs)) >= 2
+
+
+def has_publish_quality_evidence(rec: DiscoveryRecord, hints: Optional[dict[str, Any]] = None) -> bool:
+    """True when at least one of: organic X, positive flow, multi-channel intel."""
+    h = hints if hints is not None else _feature_hints(rec)
+    return (
+        _organic_x_evidence(rec, h)
+        or _first_buyer_flow_positive(rec, h)
+        or _multi_channel_intel_pass(rec, h)
+    )
+
+
+def _thin_boost_or_parasite_only(rec: DiscoveryRecord, hints: dict[str, Any]) -> Optional[str]:
+    """Return reject reason if only thin dex / boost / parasite — no real evidence."""
+    if hints.get("parasite_of_runner") is True or hints.get("parasite") is True:
+        return "parasite_only"
+    if hints.get("boost_only") is True or hints.get("paid_boost") is True:
+        if not has_publish_quality_evidence(rec, hints):
+            return "boost_only_no_organic"
+    srcs = set(_sources(rec))
+    non_lag = srcs - {"fomo_sidebar"}
+    if hints.get("thin_dex_new") is True and not has_publish_quality_evidence(rec, hints):
+        return "thin_dex_new_only"
+    # Pure dexscreener_new (or empty after stripping lagging) with no quality overlay
+    if non_lag and non_lag <= {"dexscreener_new"} and not has_publish_quality_evidence(rec, hints):
+        return "thin_dex_new_only"
+    return None
+
+
 def score_discovery(
     rec: DiscoveryRecord,
     *,
@@ -190,6 +275,16 @@ def score_discovery(
         return GateResult(
             decision=CandidateDecision.reject,
             reasons=["airdrop_farm"],
+            pursue_eligible=False,
+        )
+
+    # Thin dex / boost / parasite alone → hard reject (never publish BUY)
+    thin_reason = _thin_boost_or_parasite_only(rec, hints)
+    if thin_reason:
+        return GateResult(
+            decision=CandidateDecision.reject,
+            reasons=[thin_reason],
+            warnings=warnings + ["thin_boost_parasite_no_emit"],
             pursue_eligible=False,
         )
 
@@ -292,6 +387,20 @@ def score_discovery(
                     reasons=["fomo_only_discovery"],
                     pursue_eligible=False,
                 )
+        # Age+MC alone is NOT enough for a published BUY — need quality evidence
+        quality = has_publish_quality_evidence(rec, hints)
+        if not quality:
+            reasons.append("age_mc_without_quality_evidence")
+            warnings.append(
+                "pursue research only — need organic X, positive flow, or multi-channel intel to emit BUY"
+            )
+            return GateResult(
+                decision=CandidateDecision.pursue,
+                reasons=reasons,
+                warnings=warnings,
+                pursue_eligible=False,
+            )
+        reasons.append("publish_quality_evidence")
         return GateResult(
             decision=CandidateDecision.pursue,
             reasons=reasons,

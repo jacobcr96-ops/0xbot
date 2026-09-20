@@ -2,6 +2,9 @@
 
 Fan-out order: ledger write → market enrich → score → decision.
 Live execution stays DISARMED unless XINTEL_ARMED.
+
+Real BUY emit only via emit_pursue_buy when gate.decision==pursue and
+pursue_eligible. Never invent calibration_shadow / shadow_only stubs.
 """
 
 from __future__ import annotations
@@ -45,7 +48,7 @@ def _evidence_from_record(rec: DiscoveryRecord) -> list[dict[str, Any]]:
                 "channel": channel,
                 "summary": f"discovery source={src} first={rec.first_source}",
                 "observed_at": rec.first_seen_at.isoformat(),
-                "refs": (rec.raw_refs or [])[:3],
+                "refs": [],
                 "weight": 0.3 if src == "fomo_sidebar" else 0.6,
             }
         )
@@ -109,6 +112,35 @@ def enrich_market(rec: DiscoveryRecord) -> DiscoveryRecord:
     return rec
 
 
+def _refresh_candidate_from_record(
+    cand: CandidateV1, rec: DiscoveryRecord, gate: GateResult
+) -> CandidateV1:
+    """Merge latest discovery sources/evidence onto an existing candidate."""
+    cand.decision = gate.decision
+    cand.reject_reason = gate.reject_reason
+    srcs = [rec.first_source, *[s for s in rec.sources if s != rec.first_source]]
+    # Keep prior accounts, append new
+    merged_accounts = list(dict.fromkeys([*(cand.source_accounts or []), *srcs]))
+    cand.source_accounts = merged_accounts
+    # Prefer freshest evidence from full record (refs always [])
+    cand.evidence = _evidence_from_record(rec)
+    fs = _feature_scores_from_hints(rec)
+    if fs is not None:
+        cand.feature_scores = fs
+    if (rec.confidence_hints or {}).get("window_type"):
+        cand.window_type = rec.confidence_hints.get("window_type")
+    data = cand.model_dump(mode="json")
+    data["discovery"] = {
+        "first_source": rec.first_source,
+        "sources": list(rec.sources),
+        "lagging_universe": rec.lagging_universe,
+        "discovery_latency_features": rec.discovery_latency_features,
+        "gate_reasons": gate.reasons,
+        "gate_warnings": gate.warnings,
+    }
+    return CandidateV1.model_validate(data)
+
+
 def upsert_candidate(
     rec: DiscoveryRecord,
     gate: GateResult,
@@ -120,17 +152,14 @@ def upsert_candidate(
     if rec.candidate_id:
         existing = ledger.get_candidate(rec.candidate_id)
         if existing is not None:
-            existing.decision = gate.decision
-            existing.reject_reason = gate.reject_reason
-            # merge evidence sources lightly
+            existing = _refresh_candidate_from_record(existing, rec, gate)
             ledger.save_candidate(existing, append_index=False)
             return existing
 
     # Search by ca+chain among recent candidates
     for c in ledger.list_candidates():
         if c.contract_address == rec.ca and c.chain == rec.chain:
-            c.decision = gate.decision
-            c.reject_reason = gate.reject_reason
+            c = _refresh_candidate_from_record(c, rec, gate)
             rec.candidate_id = str(c.candidate_id)
             ledger.save_candidate(c, append_index=False)
             return c
