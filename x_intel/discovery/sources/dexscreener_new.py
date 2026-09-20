@@ -47,10 +47,31 @@ class DexScreenerNewSource:
     def poll(self) -> list[DiscoveryEvent]:
         if not self.live:
             return self._poll_fixture()
+        # Jacob: Dex 429s are noise — skip when disabled or in cooldown.
+        import os, time
+        if os.environ.get("XINTEL_SKIP_DEX", "").strip().lower() in {"1", "true", "yes", "on"}:
+            log.info("dexscreener_new skipped (XINTEL_SKIP_DEX)")
+            return []
+        cool = Path(os.environ.get("XINTEL_DATA_DIR", "data")) / "health" / "dex_cooldown_until"
+        try:
+            if cool.is_file() and time.time() < float(cool.read_text().strip() or "0"):
+                log.info("dexscreener_new skipped (cooldown after 429)")
+                return []
+        except Exception:
+            pass
         try:
             return self._poll_live()
         except Exception as e:  # noqa: BLE001 — discovery must not crash runner
+            msg = str(e)
             log.warning("dexscreener_new live poll failed: %s — no fixture fallback in live mode", e)
+            if "429" in msg or "Too Many Requests" in msg:
+                try:
+                    cool.parent.mkdir(parents=True, exist_ok=True)
+                    # 30 min cooldown
+                    cool.write_text(str(time.time() + 30 * 60))
+                    log.info("dexscreener_new cooldown armed 30m after 429")
+                except Exception:
+                    pass
             return []
 
     def _poll_fixture(self) -> list[DiscoveryEvent]:

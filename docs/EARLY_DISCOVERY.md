@@ -159,3 +159,18 @@ python -m x_intel.discovery.validate
 ## Validation
 
 `x_intel/discovery/validate.py` simulates source ordering vs BATCH case T0/peak and is **explicit when minute data is missing**. Prospective runs log `discovery_latency_features` on every first sighting.
+
+
+## WATCH dip-buy escalate
+
+Module: `x_intel/discovery/watch_escalate.py` (wired in `runner.run_cycle` after source ingest).
+
+| Rule | Threshold |
+|------|-----------|
+| Dip BUY | `mc_now ≤ $2M` AND (`first_sight` null OR `mc_now ≤ 0.85 × first_sight`) |
+| Reclaim BUY | `min_mc_seen < $2M` AND `mc_now < min(first_sight×1.1, $3.5M)` once |
+| No chase | `mc_now ≥ $4M` and never bought |
+| Stale watch | refresh age `> 600s` |
+| Flag | `watch_dip_buy` on real BUY (no shadow/calibration) |
+
+Solana preferred; skip hard-rugged / name-parasite clones. Persist `mc_usd_now`, `min_mc_usd_seen`, `refreshed_at`.

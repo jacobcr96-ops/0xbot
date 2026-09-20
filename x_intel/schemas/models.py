@@ -99,6 +99,8 @@ class MarketSnapshot(BaseModel):
 class Outcomes(BaseModel):
     """Fractional returns from first_seen (0.25 = +25%)."""
 
+    model_config = ConfigDict(extra="allow")
+
     ret_5m: Optional[float] = None
     ret_15m: Optional[float] = None
     ret_1h: Optional[float] = None

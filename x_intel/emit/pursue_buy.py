@@ -11,7 +11,7 @@ import json
 import logging
 import sys
 import warnings
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
@@ -266,6 +266,9 @@ def pursue_candidate_to_buy(
     early_mc_usd_max: Optional[float] = DEFAULT_EARLY_MC_USD_MAX,
     thesis: Optional[str] = None,
     issued_at: Optional[datetime] = None,
+    extra_risk_flags: Optional[list[str]] = None,
+    market_mc_usd: Optional[float] = None,
+    ttl_seconds: Optional[int] = None,
 ) -> tuple[DecisionV1, list[str]]:
     """Build a BUY DecisionV1 from a pursue candidate. Raises GateReject on fail."""
     warns = check_pursue_buy_gates(candidate, early_mc_usd_max=early_mc_usd_max)
@@ -281,11 +284,19 @@ def pursue_candidate_to_buy(
     evidence = _normalize_evidence(candidate)
     armed_flag = do_not_execute_until_armed()
 
+    flags = ["pursue_buy_emitter", "publish_quality_pass"]
+    for f in extra_risk_flags or []:
+        if f and f not in flags:
+            flags.append(str(f))
+
+    snap_mc = market_mc_usd if market_mc_usd is not None else candidate.mc_usd_at_first_sight
+    expires = default_expires_at(DecisionAction.BUY, now, ttl_seconds=ttl_seconds)
+
     decision = DecisionV1(
         decision_id=uuid4(),
         action=DecisionAction.BUY,
         issued_at=now,
-        expires_at=default_expires_at(DecisionAction.BUY, now),
+        expires_at=expires,
         contract_address=candidate.contract_address.strip(),
         chain=chain,  # type: ignore[arg-type]
         ticker=candidate.ticker,
@@ -298,12 +309,12 @@ def pursue_candidate_to_buy(
             urgency="normal",
         ),
         market_snapshot=MarketSnapshot(
-            mc_usd=candidate.mc_usd_at_first_sight,
+            mc_usd=snap_mc,
             price_usd=candidate.price_usd_at_first_sight,
-            as_of=candidate.first_seen_at,
+            as_of=candidate.first_seen_at if market_mc_usd is None else now,
         ),
         evidence=evidence,
-        risk_flags=["pursue_buy_emitter", "publish_quality_pass"],
+        risk_flags=flags,
         experiment_id=candidate.experiment_id,
         candidate_id=str(candidate.candidate_id),
         do_not_execute_until_armed=armed_flag,

@@ -17,6 +17,7 @@ from x_intel.config import data_dir, is_armed
 from x_intel.discovery.bus import DiscoveryBus
 from x_intel.discovery.pipeline import ingest_event
 from x_intel.discovery.sources import default_sources
+from x_intel.discovery.watch_escalate import run_watch_escalate_cycle
 from x_intel.ledger.store import CandidateLedger, RepoPaths
 
 log = logging.getLogger(__name__)
@@ -66,6 +67,29 @@ def run_cycle(
                 summary["sources"],
             )
     bus.persist()
+
+    # Anti-stale WATCH MC refresh + dip-buy escalate (no X API spend)
+    try:
+        watch_summary = run_watch_escalate_cycle(
+            ledger=ledger,
+            data_root=root,
+            live=live,
+            emit_buy=emit_buy,
+        )
+        log.info(
+            "watch_escalate watches=%s stale=%s buys=%s",
+            watch_summary.get("watch_count"),
+            watch_summary.get("watch_stale_count"),
+            watch_summary.get("buy_emitted_n"),
+        )
+        # Keep ingest summaries homogeneous; stash escalate on the side.
+        if results and isinstance(results[-1], dict):
+            results[-1]["_watch_escalate"] = watch_summary
+        else:
+            log.info("watch_escalate summary=%s", watch_summary)
+    except Exception as e:  # noqa: BLE001 — never crash ingest on escalate
+        log.warning("watch_escalate failed: %s", e)
+
     return results
 
 
