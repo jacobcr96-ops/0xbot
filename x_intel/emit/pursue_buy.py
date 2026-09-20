@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
-from x_intel.discovery.gates import has_publish_quality_evidence
+from x_intel.discovery.gates import has_publish_quality_evidence, has_watch_dip_quality_evidence
 from x_intel.discovery.models import DiscoveryRecord
 from x_intel.discovery.parasite import detect_parasite_by_ca
 from x_intel.config import (
@@ -134,6 +134,7 @@ def check_pursue_buy_gates(
     candidate: CandidateV1,
     *,
     early_mc_usd_max: Optional[float] = DEFAULT_EARLY_MC_USD_MAX,
+    allow_watch_dip_quality: bool = False,
 ) -> list[str]:
     """Return warning strings; raise GateReject on hard failures."""
     warnings_out: list[str] = []
@@ -203,6 +204,10 @@ def check_pursue_buy_gates(
         raise GateReject("parasite_only — no emit")
 
     quality = has_publish_quality_evidence(rec, hints)
+    if not quality and allow_watch_dip_quality:
+        quality = has_watch_dip_quality_evidence(rec, hints)
+        if quality:
+            warnings_out.append("watch_dip_quality_path — non-clone curve/social without organic X")
 
     if (hints.get("boost_only") is True or hints.get("paid_boost") is True) and not quality:
         raise GateReject("boost_only_no_organic — no emit")
@@ -213,6 +218,7 @@ def check_pursue_buy_gates(
         raise GateReject(
             "publish quality missing — need organic X, positive flow, multi-channel, "
             "or curve+social with reinforcement (mc_rising / profile / unique ticker)"
+            + ("; watch_dip non-clone curve/social also failed" if allow_watch_dip_quality else "")
         )
 
     # Late / post-move must never emit BUY
@@ -278,9 +284,14 @@ def pursue_candidate_to_buy(
     extra_risk_flags: Optional[list[str]] = None,
     market_mc_usd: Optional[float] = None,
     ttl_seconds: Optional[int] = None,
+    allow_watch_dip_quality: bool = False,
 ) -> tuple[DecisionV1, list[str]]:
     """Build a BUY DecisionV1 from a pursue candidate. Raises GateReject on fail."""
-    warns = check_pursue_buy_gates(candidate, early_mc_usd_max=early_mc_usd_max)
+    warns = check_pursue_buy_gates(
+        candidate,
+        early_mc_usd_max=early_mc_usd_max,
+        allow_watch_dip_quality=allow_watch_dip_quality,
+    )
     for w in warns:
         warnings.warn(w, stacklevel=2)
         log.warning(w)
@@ -399,7 +410,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "--early-mc-max",
         type=float,
         default=DEFAULT_EARLY_MC_USD_MAX,
-        help="Reject if mc_usd_at_first_sight above this (default 500000)",
+        help="Reject if mc_usd_at_first_sight above this (default 1000000)",
     )
     parser.add_argument(
         "--allow-any-mc",

@@ -373,3 +373,139 @@ def test_scat_not_stamp_parasite_with_reinforcement():
     )
     assert detect_parasite_by_ca(scat) is None
     assert has_publish_quality_evidence(scat) is True
+
+
+def test_scat_276k_unique_curve_social_pursue_buy_not_watch():
+    """SCAT-like $276k unique first-sight must pursue/BUY — not dead-end WATCH at $250k band."""
+    scat = _rec(
+        ca=SCAT_CA,
+        ticker="SCAT",
+        name="Shielded Cat",
+        mc_usd=276_000,
+        confidence_hints={
+            "pump_curve": True,
+            "verified_social": True,
+            "pump_twitter": "https://x.com/Noorii__5/status/2101759322233417764",
+            "mc_source": "pump.fun",
+            "mc_live_early": True,
+            "ticker_unique_recent": True,
+            "clone_storm": False,
+            "spam_farm_ticker": False,
+        },
+    )
+    assert has_publish_quality_evidence(scat) is True
+    gate = score_discovery(scat)
+    assert gate.decision == CandidateDecision.pursue
+    assert gate.pursue_eligible is True
+    assert "publish_quality_evidence" in gate.reasons
+
+
+def test_zebra_576k_unique_curve_social_pursue_buy():
+    """Earlier ZEBRA ~$576k unique first-sight under $1M actionable ceiling → BUY-eligible."""
+    zebra = _rec(
+        ca="tEv6JBWqEfhfb1qAvzH4kYMRFq25WASF358aaW3pump",
+        ticker="ZEBRA",
+        name="ZEBRA",
+        mc_usd=576_000,
+        confidence_hints={
+            "pump_curve": True,
+            "verified_social": True,
+            "pump_twitter": "https://x.com/zebra_sol",
+            "mc_source": "pump.fun",
+            "mc_rising": True,
+            "ticker_unique_recent": True,
+            "clone_storm": False,
+            "spam_farm_ticker": False,
+        },
+    )
+    assert has_publish_quality_evidence(zebra) is True
+    gate = score_discovery(zebra)
+    assert gate.decision == CandidateDecision.pursue
+    assert gate.pursue_eligible is True
+
+
+def test_zebra_7m_first_sight_still_hard_reject():
+    """Late ZEBRA first_seen ~$7.3M → hard ceiling reject (no chase)."""
+    zebra = _rec(
+        ca="GekPGpd9MAnejumTeXfhfuhPFgch7ST4wxqtESxEpump",
+        ticker="ZEBRA",
+        name="ZEBRA",
+        mc_usd=7_300_000,
+        confidence_hints={
+            "pump_curve": True,
+            "verified_social": True,
+            "pump_twitter": "https://x.com/zebra_sol",
+            "mc_source": "pump.fun",
+            "ticker_unique_recent": True,
+        },
+    )
+    gate = score_discovery(zebra)
+    assert gate.decision == CandidateDecision.reject
+    assert any(r.startswith("mc_above_hard_ceiling") for r in gate.reasons)
+    assert gate.pursue_eligible is False
+
+
+def test_clone_storm_still_hard_reject_under_1m_band():
+    """Raising early band must not reopen HELLO×N clone-storm floods."""
+    storm = _rec(
+        ca="HELLoCLoneMint3333333333333333333333333",
+        ticker="HELLO",
+        mc_usd=400_000,
+        confidence_hints={
+            "pump_curve": True,
+            "verified_social": True,
+            "pump_twitter": "https://x.com/AlliancexHorde/status/1",
+            "mc_source": "pump.fun",
+            "mc_live_early": True,
+            "clone_storm": True,
+            "spam_farm_ticker": True,
+            "ticker_distinct_cas_recent": 5,
+        },
+    )
+    gate = score_discovery(storm)
+    assert gate.decision == CandidateDecision.reject
+    assert "clone_storm_ticker" in gate.reasons
+    assert has_publish_quality_evidence(storm) is False
+
+
+def test_watch_dip_quality_non_clone_curve_no_organic_x():
+    """Watch-dip path: non-clone curve native without organic X may pass dip quality."""
+    from x_intel.discovery.gates import has_watch_dip_quality_evidence
+
+    zebra = _rec(
+        ca="tEv6JBWqEfhfb1qAvzH4kYMRFq25WASF358aaW3pump",
+        ticker="ZEBRA",
+        mc_usd=576_000,
+        sources=["pumpfun_curve"],
+        first_source="pumpfun_curve",
+        confidence_hints={
+            "pump_curve": True,
+            "mc_source": "pump.fun",
+            "mc_usd_now": 480_000,
+            "clone_storm": False,
+            "spam_farm_ticker": False,
+            # no verified_social / organic X — full publish quality fails
+        },
+    )
+    assert has_publish_quality_evidence(zebra) is False
+    assert has_watch_dip_quality_evidence(zebra) is True
+
+
+def test_watch_dip_quality_blocks_clone_farm():
+    from x_intel.discovery.gates import has_watch_dip_quality_evidence
+
+    farm = _rec(
+        ca="TitcoinFarmMint1111111111111111111111111",
+        ticker="TITCOIN",
+        mc_usd=200_000,
+        confidence_hints={
+            "pump_curve": True,
+            "verified_social": True,
+            "pump_twitter": "https://x.com/x/status/1",
+            "mc_source": "pump.fun",
+            "clone_storm": True,
+            "spam_farm_ticker": True,
+            "mc_usd_now": 150_000,
+        },
+    )
+    assert has_watch_dip_quality_evidence(farm) is False

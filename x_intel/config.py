@@ -80,7 +80,9 @@ def data_dir(start: Optional[Path] = None) -> Path:
 BUY_ADD_TTL_SECONDS = 1200
 
 # Early MC gate for pursue→BUY (null MC allowed with warning).
-DEFAULT_EARLY_MC_USD_MAX = 500_000.0
+# Align with discovery pump/dex actionable early ceiling ($1M) so SCAT/ZEBRA-class
+# first-sights under $1M are not blocked at emit after quality pass.
+DEFAULT_EARLY_MC_USD_MAX = 1_000_000.0
 
 # Default size stub when emitting BUY from pursue.
 DEFAULT_BUY_PERCENT_EQUITY = 1.0

@@ -28,12 +28,13 @@ AGE_MINUTES_PURSUE_MAX = 30.0
 # Soft watch upper age — still interesting but late for first size.
 AGE_MINUTES_WATCH_MAX = 180.0
 
-# Pump.fun / bonding-curve early MC band (BATCH: Decrypt PNUT early ~<$10k;
-# practical pursue ceiling before "already printed" for curve tokens).
-MC_USD_PUMP_CURVE_MAX = 250_000.0
+# Pump.fun / bonding-curve early actionable band.
+# BATCH: PNUT early <<$10k, but STAMP-class unique first-sights (SCAT ~$276k,
+# ZEBRA ~$576k) must still pursue/BUY under ~$1M — not dead-end WATCH.
+# ≥$4M never-bought stays no_chase via watch_escalate; hard reject at $5M.
+MC_USD_PUMP_CURVE_MAX = 1_000_000.0
 
-# Dex-new pairs already on AMM: wider early band if liquidity present.
-# BATCH: many runners still sub-$1M when first liquid on DexScreener.
+# Dex-new pairs already on AMM: same actionable early ceiling under $1M.
 MC_USD_DEX_NEW_MAX = 1_000_000.0
 
 # After enrich, zero/near-zero liq microcaps are dead/untradable → reject.
@@ -294,6 +295,46 @@ def has_publish_quality_evidence(rec: DiscoveryRecord, hints: Optional[dict[str,
         or _curve_plus_verified_social(rec, h)
         or _volume_flow_quality(rec, h)
     )
+
+
+def has_watch_dip_quality_evidence(
+    rec: DiscoveryRecord, hints: Optional[dict[str, Any]] = None
+) -> bool:
+    """Looser quality for WATCH→dip-BUY on *real dips* (not reclaim).
+
+    Organic X is NOT required for pump.fun curve-native uniques. Still hard-blocks
+    clone_storm / spam_farm / parasite so Titcoin-class farms cannot reclaim-BUY.
+    Accept when full publish quality passes OR non-clone with curve and/or
+    enrich social under the secondary early MC ceiling.
+    """
+    h = hints if hints is not None else _feature_hints(rec)
+    if has_publish_quality_evidence(rec, h):
+        return True
+    if h.get("clone_storm") is True or h.get("spam_farm_ticker") is True:
+        return False
+    if h.get("parasite") is True or h.get("parasite_of_runner") is True:
+        return False
+    if detect_parasite_by_ca(rec):
+        return False
+    mc = rec.mc_usd
+    # Prefer live/now MC when stamped for dip path
+    if h.get("mc_usd_now") is not None:
+        try:
+            mc = float(h["mc_usd_now"])
+        except (TypeError, ValueError):
+            pass
+    if mc is not None and mc >= EARLY_MC_SECONDARY_USD:
+        return False
+    has_curve = (
+        "pumpfun_curve" in _sources(rec)
+        or h.get("pump_curve") is True
+        or _is_pump_curve_context(rec)
+    )
+    has_social = _verified_social_from_enrich(h)
+    # Curve-native unique OR enrich social on a non-clone watch — no organic X
+    if has_curve or has_social:
+        return True
+    return False
 
 
 

@@ -108,7 +108,7 @@ Encoded in `x_intel/discovery/gates.py`:
 |----------|-------|--------------------|
 | `AGE_MINUTES_PURSUE_MAX` | **30** | BATCH edge was minutes/hours from mint — past ~30m is usually not first size. |
 | `AGE_MINUTES_WATCH_MAX` | **180** | Still interesting to watch through 3h; beyond → reject as late. |
-| `MC_USD_PUMP_CURVE_MAX` | **250_000** | Pump-curve early band; PNUT Decrypt early <<$10k; $250k is practical ceiling before mid-print. |
+| `MC_USD_PUMP_CURVE_MAX` | **1_000_000** | Pump-curve actionable early band; unique first-sights (SCAT/ZEBRA-class) under ~$1M may pursue/BUY when quality passes; ≥$4M never-bought stays no_chase. |
 | `MC_USD_DEX_NEW_MAX` | **1_000_000** | Already-listed dex-new with liq can remain early under ~$1M. |
 | `MIN_LIQ_USD_AFTER_ENRICH` | **500** | Dead micro with ~0 liq after enrich → reject (untradable). |
 | `MC_USD_HARD_REJECT` | **5_000_000** | Past $5M is not early-mover discovery. |
@@ -122,7 +122,7 @@ Encoded in `x_intel/discovery/gates.py`:
 ### Soft prefer pursue when
 
 - `age_minutes ≤ 30` from pair create / first seen
-- MC under early band (pump ≤250k; dex-new ≤1M) or MC unknown
+- MC under early band (pump/dex-new ≤1M) or MC unknown
 - S1 or S3 true when feature hints present (unscored → age+MC enough for v0)
 - Not FOMO-only; not D1; resolvable CA
 

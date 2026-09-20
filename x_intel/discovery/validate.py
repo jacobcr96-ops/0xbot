@@ -189,7 +189,7 @@ def generate_report(reports_dir: Optional[Path] = None) -> str:
     lines.append("| Constant | Value | Rationale |")
     lines.append("|----------|-------|-----------|")
     lines.append("| `AGE_MINUTES_PURSUE_MAX` | 30 | Early edge dies after first half-hour of pair life in BATCH pump cohort. |")
-    lines.append("| `MC_USD_PUMP_CURVE_MAX` | 250_000 | Curve tokens past ~$250k are usually mid-print; PNUT early was <<$10k. |")
+    lines.append("| `MC_USD_PUMP_CURVE_MAX` | 1_000_000 | Actionable early ceiling for unique curve first-sights; PNUT early was <<$10k. |")
     lines.append("| `MC_USD_DEX_NEW_MAX` | 1_000_000 | Listed dex-new with liq can still be early under $1M. |")
     lines.append("| `MIN_LIQ_USD_AFTER_ENRICH` | 500 | Dead micros with ~0 liq are untradable rejects. |")
     lines.append("| `MC_USD_HARD_REJECT` | 5_000_000 | Past $5M is not early-mover discovery. |")

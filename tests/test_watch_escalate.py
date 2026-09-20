@@ -251,3 +251,100 @@ def test_freshness_file_written(tmp_data: Path):
     extra = getattr(loaded, "__pydantic_extra__", None) or {}
     assert float(extra.get("mc_usd_now") or 0) == 1_550_000.0
     assert float(extra.get("min_mc_usd_seen") or 0) == 1_550_000.0
+
+
+def test_watch_dip_emits_without_organic_x_for_curve_unique(tmp_data: Path):
+    """Real dip on non-clone curve watch may BUY without organic X evidence."""
+    now = datetime.now(timezone.utc)
+    cand = CandidateV1(
+        candidate_id=uuid4(),
+        first_seen_at=now - timedelta(hours=1),
+        contract_address="tEv6JBWqEfhfb1qAvzH4kYMRFq25WASF358aaW3pump",
+        chain="solana",
+        ticker="ZEBRA",
+        mc_usd_at_first_sight=576_000,
+        decision=CandidateDecision.watch,
+        evidence=[
+            EvidenceItem(
+                channel="launch_metrics",
+                summary="pump curve first sight",
+                observed_at=now,
+                refs=[],
+            )
+        ],
+        source_accounts=["pumpfun_curve"],
+        mc_usd_now=450_000,
+        min_mc_usd_seen=450_000,
+        refreshed_at=now.isoformat().replace("+00:00", "Z"),
+        discovery={
+            "first_source": "pumpfun_curve",
+            "sources": ["pumpfun_curve"],
+            "mc_usd": 576_000,
+            "mc_source": "pump.fun",
+            "confidence_hints": {
+                "pump_curve": True,
+                "mc_source": "pump.fun",
+                "ticker_unique_recent": True,
+                "clone_storm": False,
+                "spam_farm_ticker": False,
+            },
+        },
+    )
+    ledger = CandidateLedger(RepoPaths(data=tmp_data))
+    ledger.save_candidate(cand)
+    summary = run_watch_escalate_cycle(
+        ledger=ledger,
+        data_root=tmp_data,
+        live=True,
+        emit_buy=True,
+        mc_fetcher=lambda ca, chain="solana": 450_000.0,
+    )
+    assert summary["buy_emitted_n"] == 1
+    assert summary["buys"][0]["reason"] == "watch_dip"
+
+
+def test_watch_dip_still_rejects_clone_storm_quality(tmp_data: Path):
+    now = datetime.now(timezone.utc)
+    cand = CandidateV1(
+        candidate_id=uuid4(),
+        first_seen_at=now - timedelta(hours=1),
+        contract_address="TitC0inFarmMintABCDEFGHJKLmnpqrstuvwxyZA",
+        chain="solana",
+        ticker="TITCOIN",
+        mc_usd_at_first_sight=300_000,
+        decision=CandidateDecision.watch,
+        evidence=[
+            EvidenceItem(
+                channel="launch_metrics",
+                summary="farm",
+                observed_at=now,
+                refs=[],
+            )
+        ],
+        source_accounts=["pumpfun_curve"],
+        mc_usd_now=200_000,
+        min_mc_usd_seen=200_000,
+        refreshed_at=now.isoformat().replace("+00:00", "Z"),
+        discovery={
+            "first_source": "pumpfun_curve",
+            "sources": ["pumpfun_curve"],
+            "confidence_hints": {
+                "pump_curve": True,
+                "mc_source": "pump.fun",
+                "clone_storm": True,
+                "spam_farm_ticker": True,
+            },
+        },
+    )
+    ledger = CandidateLedger(RepoPaths(data=tmp_data))
+    ledger.save_candidate(cand)
+    summary = run_watch_escalate_cycle(
+        ledger=ledger,
+        data_root=tmp_data,
+        live=True,
+        emit_buy=True,
+        mc_fetcher=lambda ca, chain="solana": 200_000.0,
+    )
+    assert summary["buy_emitted_n"] == 0
+    reason = summary["escalate"][0]["reason"]
+    assert reason.startswith("gate_reject:") or "quality" in reason

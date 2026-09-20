@@ -777,6 +777,24 @@ def _emit_watch_dip_buy(
             }
         )
 
+    # Stamp live MC into discovery hints so watch-dip quality can see it
+    extra = dict(getattr(pursue_cand, "__pydantic_extra__", None) or {})
+    disc = dict(extra.get("discovery") or {})
+    ch = dict(disc.get("confidence_hints") or {})
+    if mc_now is not None:
+        ch["mc_usd_now"] = mc_now
+    disc["confidence_hints"] = ch
+    if "sources" not in disc:
+        disc["sources"] = list(pursue_cand.source_accounts or [])
+    extra["discovery"] = disc
+    data = pursue_cand.model_dump(mode="json")
+    data.update(extra)
+    pursue_cand = CandidateV1.model_validate(data)
+
+    # Real dip vs first_sight may use looser non-clone quality (no organic X).
+    # Reclaim keeps full publish-quality bar to avoid same-cycle farm reclaim BUYs.
+    relax = reason == "watch_dip"
+
     thesis = (
         f"watch_dip_buy/{reason} {cand.ticker or cand.contract_address[:8]} "
         f"mc_now={mc_now} first_sight={cand.mc_usd_at_first_sight} "
@@ -793,6 +811,7 @@ def _emit_watch_dip_buy(
         extra_risk_flags=["watch_dip_buy", reason],
         market_mc_usd=mc_now,
         ttl_seconds=DIP_BUY_TTL_SECONDS,
+        allow_watch_dip_quality=relax,
     )
     # Final assert: no shadow flags, refs empty, armed policy
     banned = {"calibration_shadow", "shadow_only", "pipe_check", "PIPECHECK"}
