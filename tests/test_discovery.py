@@ -40,6 +40,7 @@ def tmp_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         (data / sub).mkdir(parents=True)
     monkeypatch.setenv("XINTEL_DATA_DIR", str(data))
     monkeypatch.delenv("XINTEL_ARMED", raising=False)
+    monkeypatch.setenv("XINTEL_SKIP_ENRICH", "true")  # unit tests: no live HTTP
     return data
 
 

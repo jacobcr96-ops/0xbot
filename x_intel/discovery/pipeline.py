@@ -20,6 +20,8 @@ from x_intel.discovery.bus import DiscoveryBus
 from x_intel.discovery.fanout import write_work_orders
 from x_intel.discovery.gates import BUY_TTL_SECONDS, GateResult, score_discovery
 from x_intel.discovery.models import DiscoveryEvent, DiscoveryRecord
+from x_intel.discovery.enrich import enrich_record
+from x_intel.discovery.parasite import annotate_parasite_hints
 from x_intel.emit.pursue_buy import GateReject, emit_pursue_buy
 from x_intel.ledger.store import CandidateLedger, RepoPaths
 from x_intel.schemas.models import (
@@ -35,6 +37,42 @@ log = logging.getLogger(__name__)
 
 def _evidence_from_record(rec: DiscoveryRecord) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
+    hints = rec.confidence_hints or {}
+    # Identity from live enrich — Shielded Cat ≠ random SCAT clone
+    if rec.name or hints.get("name") or rec.symbol or hints.get("symbol"):
+        items.append(
+            {
+                "channel": "launch_metrics",
+                "summary": (
+                    f"identity name={rec.name or hints.get('name')} "
+                    f"symbol={rec.symbol or hints.get('symbol') or rec.ticker} "
+                    f"mc_source={rec.mc_source or hints.get('mc_source')} "
+                    f"mc_usd={rec.mc_usd}"
+                ),
+                "observed_at": (rec.enriched_at or rec.first_seen_at).isoformat()
+                if (rec.enriched_at or rec.first_seen_at)
+                else datetime.now(timezone.utc).isoformat(),
+                "refs": [],
+                "weight": 0.5,
+            }
+        )
+    if hints.get("verified_social") or hints.get("pump_twitter") or hints.get("pump_telegram"):
+        items.append(
+            {
+                "channel": "cross_source",
+                "summary": (
+                    "weak_narrative from pump/dex socials "
+                    f"twitter={bool(hints.get('pump_twitter'))} "
+                    f"telegram={bool(hints.get('pump_telegram'))} "
+                    "(not organic X posts)"
+                ),
+                "observed_at": (rec.enriched_at or rec.first_seen_at).isoformat()
+                if (rec.enriched_at or rec.first_seen_at)
+                else datetime.now(timezone.utc).isoformat(),
+                "refs": [u for u in (hints.get("pump_twitter"), hints.get("pump_telegram")) if u],
+                "weight": 0.35,
+            }
+        )
     for src in rec.sources:
         channel = {
             "x_social": "x_social",
@@ -99,16 +137,35 @@ def _feature_scores_from_hints(rec: DiscoveryRecord) -> Optional[FeatureScoresV1
 
 
 def enrich_market(rec: DiscoveryRecord) -> DiscoveryRecord:
-    """Lightweight enrich stub — uses already-known fields; live fetch optional later."""
-    # Prospectively log latency features
-    rec.discovery_latency_features = {
-        **(rec.discovery_latency_features or {}),
-        "source": rec.first_source,
-        "first_seen_at": rec.first_seen_at.isoformat(),
-        "mc_at_first_seen": rec.mc_usd,
-        "liquidity_usd": rec.liquidity_usd,
-        "enriched_at": datetime.now(timezone.utc).isoformat(),
-    }
+    """Live market enrich (pump.fun → Dex). Never a silent no-op stub.
+
+    Sets mc_usd / liquidity / name / symbol / price / enriched_at / mc_source
+    and attaches weak narrative hints from pump socials when X is empty.
+    """
+    # Preserve first-seen MC before overwrite
+    feats = dict(rec.discovery_latency_features or {})
+    if "mc_at_first_seen" not in feats:
+        feats["mc_at_first_seen"] = rec.mc_usd
+    feats.setdefault("source", rec.first_source)
+    feats.setdefault(
+        "first_seen_at",
+        rec.first_seen_at.isoformat() if rec.first_seen_at else None,
+    )
+    rec.discovery_latency_features = feats
+
+    rec = enrich_record(rec)
+    rec = annotate_parasite_hints(rec)
+
+    # Ensure enriched_at / mc_source always stamped on the record
+    now = datetime.now(timezone.utc)
+    if rec.enriched_at is None:
+        rec.enriched_at = now
+    feats = dict(rec.discovery_latency_features or {})
+    feats["enriched_at"] = (rec.enriched_at or now).isoformat()
+    feats["liquidity_usd"] = rec.liquidity_usd
+    if rec.mc_source:
+        feats["mc_source"] = rec.mc_source
+    rec.discovery_latency_features = feats
     return rec
 
 
@@ -137,7 +194,16 @@ def _refresh_candidate_from_record(
         "discovery_latency_features": rec.discovery_latency_features,
         "gate_reasons": gate.reasons,
         "gate_warnings": gate.warnings,
+        "name": rec.name or (rec.confidence_hints or {}).get("name"),
+        "symbol": rec.symbol or (rec.confidence_hints or {}).get("symbol"),
+        "mc_usd": rec.mc_usd,
+        "mc_source": rec.mc_source or (rec.confidence_hints or {}).get("mc_source"),
+        "confidence_hints": dict(rec.confidence_hints or {}),
     }
+    if rec.ticker:
+        data["ticker"] = rec.ticker
+    if rec.mc_usd is not None and data.get("mc_usd_at_first_sight") is None:
+        data["mc_usd_at_first_sight"] = rec.mc_usd
     return CandidateV1.model_validate(data)
 
 
@@ -188,6 +254,11 @@ def upsert_candidate(
             "discovery_latency_features": rec.discovery_latency_features,
             "gate_reasons": gate.reasons,
             "gate_warnings": gate.warnings,
+            "name": rec.name or (rec.confidence_hints or {}).get("name"),
+            "symbol": rec.symbol or (rec.confidence_hints or {}).get("symbol"),
+            "mc_usd": rec.mc_usd,
+            "mc_source": rec.mc_source or (rec.confidence_hints or {}).get("mc_source"),
+            "confidence_hints": dict(rec.confidence_hints or {}),
         }
     }
     # Pydantic extra=allow — revalidate with extras
@@ -259,15 +330,22 @@ def ingest_event(
         if gate.decision == CandidateDecision.pursue:
             decision = maybe_emit_buy(cand, gate, ledger=led, emit=emit_buy)
 
+    enrich_ok = bool((rec.discovery_latency_features or {}).get("enrich_ok"))
     return {
         "is_first": is_first,
         "chain": rec.chain,
         "ca": rec.ca,
+        "ticker": rec.ticker,
+        "name": rec.name,
         "first_source": rec.first_source,
         "sources": list(rec.sources),
         "decision": gate.decision.value,
         "reasons": gate.reasons,
         "warnings": gate.warnings,
+        "pursue_eligible": gate.pursue_eligible,
+        "mc_usd": rec.mc_usd,
+        "mc_source": rec.mc_source or (rec.confidence_hints or {}).get("mc_source"),
+        "enrich_ok": enrich_ok,
         "candidate_id": str(cand.candidate_id),
         "buy_decision_id": str(decision.decision_id) if decision else None,
         "do_not_execute_until_armed": (

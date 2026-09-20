@@ -37,6 +37,8 @@ class DiscoveryEvent(BaseModel):
     chain: str
     ca: str
     ticker: Optional[str] = None
+    name: Optional[str] = None
+    symbol: Optional[str] = None
     raw_ref: Optional[str] = None
     mc_usd: Optional[float] = None
     curve_progress: Optional[float] = None  # 0..1 for bonding curves
@@ -59,7 +61,12 @@ class DiscoveryRecord(BaseModel):
     first_seen_at: datetime
     sources: list[str] = Field(default_factory=list)
     ticker: Optional[str] = None
+    name: Optional[str] = None
+    symbol: Optional[str] = None
     mc_usd: Optional[float] = None
+    price_usd: Optional[float] = None
+    enriched_at: Optional[datetime] = None
+    mc_source: Optional[str] = None
     curve_progress: Optional[float] = None
     liquidity_usd: Optional[float] = None
     pair_created_at: Optional[datetime] = None

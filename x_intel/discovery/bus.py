@@ -108,6 +108,8 @@ class DiscoveryBus:
                 first_seen_at=discovered,
                 sources=[str(event.source)],
                 ticker=event.ticker,
+                name=getattr(event, "name", None),
+                symbol=getattr(event, "symbol", None) or event.ticker,
                 mc_usd=event.mc_usd,
                 curve_progress=event.curve_progress,
                 liquidity_usd=event.liquidity_usd,
@@ -132,6 +134,12 @@ class DiscoveryBus:
             existing.sources.append(src)
         if event.ticker and not existing.ticker:
             existing.ticker = event.ticker
+        ev_name = getattr(event, "name", None)
+        if ev_name and not existing.name:
+            existing.name = ev_name
+        ev_sym = getattr(event, "symbol", None) or event.ticker
+        if ev_sym and not existing.symbol:
+            existing.symbol = ev_sym
         if event.mc_usd is not None and existing.mc_usd is None:
             existing.mc_usd = event.mc_usd
         if event.curve_progress is not None:

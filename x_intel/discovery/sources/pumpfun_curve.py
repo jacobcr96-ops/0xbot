@@ -116,10 +116,23 @@ class PumpfunCurveSource:
                     pair_created = datetime.fromtimestamp(ts, tz=timezone.utc)
                 except (TypeError, ValueError, OSError):
                     pair_created = None
-            usd_mc = r.get("usd_market_cap") or r.get("market_cap")
+            usd_mc = r.get("usd_market_cap") or r.get("market_cap_usd")
             prog = r.get("bonding_curve_progress") or r.get("progress")
             complete = r.get("complete")
             kind = "graduate" if complete is True else "curve_new"
+            hints = {
+                "pump_curve": True,
+                "pumpfun_api": True,
+                "complete": complete,
+                "name": r.get("name"),
+                "symbol": r.get("symbol"),
+            }
+            tw = (r.get("twitter") or "").strip()
+            tg = (r.get("telegram") or "").strip()
+            if tw:
+                hints["pump_twitter"] = tw
+            if tg:
+                hints["pump_telegram"] = tg
             events.append(
                 DiscoveryEvent(
                     source=self.source_id,
@@ -127,17 +140,15 @@ class PumpfunCurveSource:
                     chain="solana",
                     ca=ca,
                     ticker=r.get("symbol") or r.get("name"),
+                    name=r.get("name"),
+                    symbol=r.get("symbol"),
                     raw_ref=f"https://pump.fun/{ca}",
                     mc_usd=float(usd_mc) if usd_mc is not None else None,
                     liquidity_usd=None,
                     curve_progress=float(prog) if prog is not None else (1.0 if complete else None),
                     pair_created_at=pair_created,
                     event_kind=kind,
-                    confidence_hints={
-                        "pump_curve": True,
-                        "pumpfun_api": True,
-                        "complete": complete,
-                    },
+                    confidence_hints=hints,
                 )
             )
         log.info("pumpfun_curve pump.fun API → %d events", len(events))

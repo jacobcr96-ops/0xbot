@@ -2,6 +2,11 @@
 
 Secondary channel: emit when CA / ticker+launch cues appear. On-chain sources
 remain primary for earliest practical discovery.
+
+Live X (MCP search by mint CA, not ticker alone) is intentionally OFF by default
+to minimize X credit spend. Prefer pump.fun ``twitter``/``telegram`` fields from
+``x_intel.discovery.enrich`` as weak narrative hints. Set
+``XINTEL_X_SOCIAL_LIVE=1`` only when credits allow CA-scoped recent-post search.
 """
 
 from __future__ import annotations
@@ -40,9 +45,16 @@ class XSocialSource:
         self.ingest = ingest
 
     def poll(self) -> list[DiscoveryEvent]:
-        # Live mode: only real X ingest (MCP/keys) — never bleed fixtures into live cycles
+        # Live mode: only real X ingest (MCP/keys) — never bleed fixtures into live cycles.
+        # Default: return [] (minimize X spend). Pipeline uses pump socials via enrich.
+        # Enable CA-scoped live search only when XINTEL_X_SOCIAL_LIVE=1 and ingest set.
         if self.live and self.ingest is None:
-            return []
+            import os
+            if os.environ.get("XINTEL_X_SOCIAL_LIVE", "").strip().lower() not in {
+                "1", "true", "yes", "on",
+            }:
+                return []
+            return []  # MCP CA search hook — not wired without ingest/credits
         # Prefer dedicated discovery fixture when present (replay/tests)
         path = self._fixture_path()
         if path and path.is_file() and not self.live:

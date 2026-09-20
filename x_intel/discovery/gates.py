@@ -12,6 +12,8 @@ from typing import Any, Optional
 
 from x_intel.discovery.models import DiscoveryRecord, KNOWN_FARM_DOMAINS
 from x_intel.discovery.bus import is_resolvable_ca
+from x_intel.discovery.parasite import detect_parasite_by_ca
+from x_intel.discovery.enrich import EARLY_MC_SECONDARY_USD, is_real_social_url
 from x_intel.schemas.models import CandidateDecision
 
 # ---------------------------------------------------------------------------
@@ -188,14 +190,70 @@ def _multi_channel_intel_pass(rec: DiscoveryRecord, hints: dict[str, Any]) -> bo
     return len(set(qs)) >= 2
 
 
+
+def _verified_social_from_enrich(hints: dict[str, Any]) -> bool:
+    """Pump/Dex social link from live enrich (weak alone; usable with curve)."""
+    if hints.get("verified_social") is True:
+        return True
+    for k in ("pump_twitter", "pump_telegram", "dex_twitter", "dex_telegram"):
+        if is_real_social_url(hints.get(k) if isinstance(hints.get(k), str) else None):
+            return True
+    return False
+
+
+def _curve_plus_verified_social(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
+    """Attainable quality: bonding-curve discovery + real social + early MC + not parasite.
+
+    Weak narrative alone is never enough for BUY; stacked with pumpfun_curve and
+    live early MC it counts as publish-quality (no X API required).
+    """
+    if hints.get("parasite") is True or hints.get("parasite_of_runner") is True:
+        return False
+    if detect_parasite_by_ca(rec):
+        return False
+    has_curve = (
+        "pumpfun_curve" in _sources(rec)
+        or hints.get("pump_curve") is True
+        or _is_pump_curve_context(rec)
+    )
+    if not has_curve:
+        return False
+    if not _verified_social_from_enrich(hints):
+        return False
+    mc = rec.mc_usd
+    if mc is None or mc <= 0 or mc >= EARLY_MC_SECONDARY_USD:
+        return False
+    # Prefer rising / live-early; allow first enrich with social+curve
+    if hints.get("mc_rising") or hints.get("mc_live_early") or hints.get("mc_near_ath"):
+        return True
+    # Still accept: live MC present after enrich (mc_source set)
+    return bool(hints.get("mc_source") and hints.get("mc_source") != "enrich_failed")
+
+
+def _volume_flow_quality(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
+    """Volume-derived flow only counts when paired with another quality channel."""
+    if not hints.get("volume_flow_hint"):
+        return False
+    if hints.get("sybil") is True or hints.get("D1") is True:
+        return False
+    # Need curve or verified social alongside volume
+    has_curve = "pumpfun_curve" in _sources(rec) or hints.get("pump_curve") is True
+    return has_curve and _verified_social_from_enrich(hints)
+
+
 def has_publish_quality_evidence(rec: DiscoveryRecord, hints: Optional[dict[str, Any]] = None) -> bool:
-    """True when at least one of: organic X, positive flow, multi-channel intel."""
+    """True when at least one of: organic X, positive flow, multi-channel intel,
+    or curve+verified-social early (pump fields; no X spend required).
+    """
     h = hints if hints is not None else _feature_hints(rec)
     return (
         _organic_x_evidence(rec, h)
         or _first_buyer_flow_positive(rec, h)
         or _multi_channel_intel_pass(rec, h)
+        or _curve_plus_verified_social(rec, h)
+        or _volume_flow_quality(rec, h)
     )
+
 
 
 def _thin_boost_or_parasite_only(rec: DiscoveryRecord, hints: dict[str, Any]) -> Optional[str]:
@@ -261,6 +319,15 @@ def score_discovery(
         return GateResult(
             decision=CandidateDecision.reject,
             reasons=["ca_mismatch"],
+            pursue_eligible=False,
+        )
+
+    parasite_reason = detect_parasite_by_ca(rec)
+    if parasite_reason:
+        return GateResult(
+            decision=CandidateDecision.reject,
+            reasons=[parasite_reason],
+            warnings=warnings + ["parasite_by_ca_not_ticker"],
             pursue_eligible=False,
         )
 
@@ -391,8 +458,20 @@ def score_discovery(
         quality = has_publish_quality_evidence(rec, hints)
         if not quality:
             reasons.append("age_mc_without_quality_evidence")
+            # Research demote — clear what's missing (not a BUY path)
+            missing = []
+            if not _organic_x_evidence(rec, hints):
+                missing.append("organic_x")
+            if not _first_buyer_flow_positive(rec, hints):
+                missing.append("flow")
+            if not _verified_social_from_enrich(hints):
+                missing.append("verified_social")
+            if not _multi_channel_intel_pass(rec, hints):
+                missing.append("multi_channel")
             warnings.append(
-                "pursue research only — need organic X, positive flow, or multi-channel intel to emit BUY"
+                "pursue research only — missing quality ["
+                + ",".join(missing)
+                + "]; need organic X, positive flow, multi-channel, or curve+verified_social to emit BUY"
             )
             return GateResult(
                 decision=CandidateDecision.pursue,
