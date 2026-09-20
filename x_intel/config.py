@@ -73,11 +73,13 @@ def data_dir(start: Optional[Path] = None) -> Path:
     return (Path(__file__).resolve().parents[1] / "data").resolve()
 
 
-# BUY/ADD hard TTL — bridge RTT is 5–15s; 5 minutes leaves room without late chase.
-BUY_ADD_TTL_SECONDS = 300
+# BUY/ADD hard TTL — git handoff can cost ~3+ minutes; 20 minutes avoids false stale.
+BUY_ADD_TTL_SECONDS = 1200
 
 # Early MC gate for pursue→BUY (null MC allowed with warning).
 DEFAULT_EARLY_MC_USD_MAX = 500_000.0
 
 # Default size stub when emitting BUY from pursue.
 DEFAULT_BUY_PERCENT_EQUITY = 1.0
+# FOMO min notional ~$2.10; on ~$300 equity need >=~0.7%
+MIN_BUY_PERCENT_EQUITY = 0.75

@@ -45,7 +45,7 @@ def _evidence_from_record(rec: DiscoveryRecord) -> list[dict[str, Any]]:
                 "channel": channel,
                 "summary": f"discovery source={src} first={rec.first_source}",
                 "observed_at": rec.first_seen_at.isoformat(),
-                "refs": rec.raw_refs[:3] if rec.raw_refs else None,
+                "refs": (rec.raw_refs or [])[:3],
                 "weight": 0.3 if src == "fomo_sidebar" else 0.6,
             }
         )

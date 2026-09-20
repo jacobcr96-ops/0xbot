@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from x_intel.config import (
     DEFAULT_BUY_PERCENT_EQUITY,
+    MIN_BUY_PERCENT_EQUITY,
     DEFAULT_EARLY_MC_USD_MAX,
     do_not_execute_until_armed,
     is_armed,
@@ -230,7 +231,7 @@ def pursue_candidate_to_buy(
         or f"pursue→BUY stub for {candidate.ticker or candidate.contract_address[:8]}",
         sizing_intent=SizingIntent(
             mode="percent_equity",
-            value=percent_equity,
+            value=max(float(percent_equity), float(MIN_BUY_PERCENT_EQUITY)),
             urgency="normal",
         ),
         market_snapshot=MarketSnapshot(

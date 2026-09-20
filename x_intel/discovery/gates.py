@@ -40,7 +40,7 @@ MIN_LIQ_USD_AFTER_ENRICH = 500.0
 MC_USD_HARD_REJECT = 5_000_000.0
 
 # BUY TTL matches disk-queue contract (bridge RTT 5–15s).
-BUY_TTL_SECONDS = 300
+BUY_TTL_SECONDS = 1200
 
 # Known airdrop / farm URL fragments in raw_ref or hints
 FARM_URL_FRAGMENTS = frozenset(
