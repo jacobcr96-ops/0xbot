@@ -22,6 +22,7 @@ from x_intel.discovery.gates import BUY_TTL_SECONDS, GateResult, score_discovery
 from x_intel.discovery.models import DiscoveryEvent, DiscoveryRecord
 from x_intel.discovery.enrich import enrich_record
 from x_intel.discovery.parasite import annotate_parasite_hints
+from x_intel.discovery.clone_farm import annotate_clone_farm_hints
 from x_intel.emit.pursue_buy import GateReject, emit_pursue_buy
 from x_intel.ledger.store import CandidateLedger, RepoPaths
 from x_intel.schemas.models import (
@@ -316,6 +317,8 @@ def ingest_event(
 
     rec, is_first = discovery_bus.upsert(event)
     rec = enrich_market(rec)
+    # Ticker uniqueness / clone-storm from bus peers (KNOWN farm tickers seeded in clone_farm)
+    rec = annotate_clone_farm_hints(rec, peers=discovery_bus.all_records())
     gate = score_discovery(rec, enriched_liq_usd=rec.liquidity_usd)
     cand = upsert_candidate(rec, gate, ledger=led)
     discovery_bus.persist()

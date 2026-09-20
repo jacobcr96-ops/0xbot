@@ -212,7 +212,7 @@ def check_pursue_buy_gates(
     if not quality:
         raise GateReject(
             "publish quality missing — need organic X, positive flow, multi-channel, "
-            "or curve+verified_social"
+            "or curve+social with reinforcement (mc_rising / profile / unique ticker)"
         )
 
     # Late / post-move must never emit BUY

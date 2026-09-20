@@ -14,6 +14,7 @@ from x_intel.discovery.models import DiscoveryRecord, KNOWN_FARM_DOMAINS
 from x_intel.discovery.bus import is_resolvable_ca
 from x_intel.discovery.parasite import detect_parasite_by_ca
 from x_intel.discovery.enrich import EARLY_MC_SECONDARY_USD, is_real_social_url
+from x_intel.discovery.clone_farm import non_status_spam_twitter
 from x_intel.schemas.models import CandidateDecision
 
 # ---------------------------------------------------------------------------
@@ -201,15 +202,44 @@ def _verified_social_from_enrich(hints: dict[str, Any]) -> bool:
     return False
 
 
-def _curve_plus_verified_social(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
-    """Attainable quality: bonding-curve discovery + real social + early MC + not parasite.
+def _curve_social_reinforcement(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
+    """Extra bar beyond bare verified_social — blocks clone-farm twitter paste floods.
 
-    Weak narrative alone is never enough for BUY; stacked with pumpfun_curve and
-    live early MC it counts as publish-quality (no X API required).
+    Accept when any of:
+      - mc_rising (real lift vs first sight, not just mc_live_early)
+      - mc_near_ath
+      - non-status-spam twitter (profile URL, or twitter+telegram)
+      - unique ticker in recent window AND not a known/emit farm ticker
+    Bare status-twitter + mc_live_early alone is NOT enough (HELLO×N pattern).
+    """
+    if hints.get("mc_rising") is True:
+        return True
+    if hints.get("mc_near_ath") is True:
+        return True
+    if non_status_spam_twitter(hints):
+        return True
+    # Unique first-of-ticker with live early MC — allow early discovery
+    if (
+        hints.get("ticker_unique_recent") is True
+        and hints.get("spam_farm_ticker") is not True
+        and hints.get("clone_storm") is not True
+        and (hints.get("mc_live_early") is True or hints.get("mc_source"))
+    ):
+        return True
+    return False
+
+
+def _curve_plus_verified_social(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
+    """Attainable quality: bonding-curve + real social + early MC + reinforcement.
+
+    Weak narrative / status-twitter paste alone is never enough for BUY — require
+    uniqueness or rising/profile signal so clone farms cannot flood emits.
     """
     if hints.get("parasite") is True or hints.get("parasite_of_runner") is True:
         return False
     if detect_parasite_by_ca(rec):
+        return False
+    if hints.get("clone_storm") is True:
         return False
     has_curve = (
         "pumpfun_curve" in _sources(rec)
@@ -223,22 +253,33 @@ def _curve_plus_verified_social(rec: DiscoveryRecord, hints: dict[str, Any]) -> 
     mc = rec.mc_usd
     if mc is None or mc <= 0 or mc >= EARLY_MC_SECONDARY_USD:
         return False
-    # Prefer rising / live-early; allow first enrich with social+curve
-    if hints.get("mc_rising") or hints.get("mc_live_early") or hints.get("mc_near_ath"):
-        return True
-    # Still accept: live MC present after enrich (mc_source set)
-    return bool(hints.get("mc_source") and hints.get("mc_source") != "enrich_failed")
+    # Known farm ticker / emit-history spam: reject pure twitter-link path
+    if hints.get("spam_farm_ticker") is True and not (
+        hints.get("mc_rising") is True
+        or hints.get("mc_near_ath") is True
+        or non_status_spam_twitter(hints)
+    ):
+        return False
+    # Live MC after enrich is necessary but not sufficient — need reinforcement
+    if not (hints.get("mc_source") and hints.get("mc_source") != "enrich_failed"):
+        if not (hints.get("mc_rising") or hints.get("mc_live_early") or hints.get("mc_near_ath")):
+            return False
+    return _curve_social_reinforcement(rec, hints)
 
 
 def _volume_flow_quality(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
-    """Volume-derived flow only counts when paired with another quality channel."""
+    """Volume-derived flow only counts with curve+social reinforcement (not clone farms)."""
     if not hints.get("volume_flow_hint"):
         return False
     if hints.get("sybil") is True or hints.get("D1") is True:
         return False
-    # Need curve or verified social alongside volume
+    if hints.get("clone_storm") is True or hints.get("spam_farm_ticker") is True:
+        return False
     has_curve = "pumpfun_curve" in _sources(rec) or hints.get("pump_curve") is True
-    return has_curve and _verified_social_from_enrich(hints)
+    if not (has_curve and _verified_social_from_enrich(hints)):
+        return False
+    # Same reinforcement bar as curve+social — volume alone must not reopen farm floods
+    return _curve_social_reinforcement(rec, hints)
 
 
 def has_publish_quality_evidence(rec: DiscoveryRecord, hints: Optional[dict[str, Any]] = None) -> bool:
@@ -342,6 +383,14 @@ def score_discovery(
         return GateResult(
             decision=CandidateDecision.reject,
             reasons=["airdrop_farm"],
+            pursue_eligible=False,
+        )
+
+    if hints.get("clone_storm") is True:
+        return GateResult(
+            decision=CandidateDecision.reject,
+            reasons=["clone_storm_ticker"],
+            warnings=warnings + ["same_ticker_many_mints_recent"],
             pursue_eligible=False,
         )
 
@@ -471,7 +520,7 @@ def score_discovery(
             warnings.append(
                 "pursue research only — missing quality ["
                 + ",".join(missing)
-                + "]; need organic X, positive flow, multi-channel, or curve+verified_social to emit BUY"
+                + "]; need organic X, positive flow, multi-channel, or curve+social with reinforcement (mc_rising / profile twitter / unique ticker) to emit BUY"
             )
             return GateResult(
                 decision=CandidateDecision.pursue,

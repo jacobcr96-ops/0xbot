@@ -113,9 +113,11 @@ def test_score_rejects_stamp_clone_not_scat():
         confidence_hints={
             "pump_curve": True,
             "verified_social": True,
-            "pump_twitter": "https://x.com/Noorii__5/status/1",
+            "pump_twitter": "https://x.com/Noorii__5",  # profile, not status spam
             "mc_source": "pump.fun",
             "mc_live_early": True,
+            "mc_rising": True,
+            "ticker_unique_recent": True,
         },
     )
     gate = score_discovery(scat)
@@ -150,9 +152,10 @@ def test_curve_plus_social_quality_not_weak_alone():
         confidence_hints={
             "pump_curve": True,
             "verified_social": True,
-            "pump_twitter": "https://x.com/foo/status/1",
+            "pump_twitter": "https://x.com/ShieldedCat",
             "mc_source": "pump.fun",
             "mc_live_early": True,
+            "ticker_unique_recent": True,
         },
     )
     assert has_publish_quality_evidence(good) is True
@@ -234,9 +237,11 @@ def test_ingest_keeps_name_identity(tmp_data: Path, monkeypatch: pytest.MonkeyPa
         confidence_hints={
             "pump_curve": True,
             "verified_social": True,
-            "pump_twitter": "https://x.com/foo/status/1",
+            "pump_twitter": "https://x.com/ShieldedCat",
             "mc_source": "pump.fun",
             "mc_live_early": True,
+            "mc_rising": True,
+            "ticker_unique_recent": True,
             "name": "Shielded Cat",
         },
     )
@@ -247,3 +252,124 @@ def test_ingest_keeps_name_identity(tmp_data: Path, monkeypatch: pytest.MonkeyPa
     rec = bus.get("solana", SCAT_CA)
     assert rec is not None
     assert rec.name == "Shielded Cat"
+
+
+def test_hello_status_twitter_no_quality_without_reinforcement():
+    """Clone-farm HELLO pattern: curve + status twitter + mc_live_early must NOT BUY."""
+    hello = _rec(
+        ca="HELLoCLoneMint1111111111111111111111112",
+        ticker="HELLO",
+        name="HELLO",
+        mc_usd=3_100,
+        confidence_hints={
+            "pump_curve": True,
+            "verified_social": True,
+            "pump_twitter": "https://x.com/AlliancexHorde/status/2101807419739308038?s=20",
+            "mc_source": "pump.fun",
+            "mc_live_early": True,
+            "volume_flow_hint": True,
+            "spam_farm_ticker": True,
+            "ticker_unique_recent": False,
+            "clone_storm": False,
+            "twitter_status_only": True,
+        },
+    )
+    assert has_publish_quality_evidence(hello) is False
+    gate = score_discovery(hello)
+    # Early age+mc → pursue research, but not emit-eligible
+    assert gate.pursue_eligible is False
+
+
+def test_hello_clone_storm_hard_reject():
+    storm = _rec(
+        ca="HELLoCLoneMint2222222222222222222222222",
+        ticker="HELLO",
+        mc_usd=3_100,
+        confidence_hints={
+            "pump_curve": True,
+            "verified_social": True,
+            "pump_twitter": "https://x.com/AlliancexHorde/status/1",
+            "mc_source": "pump.fun",
+            "mc_live_early": True,
+            "clone_storm": True,
+            "spam_farm_ticker": True,
+            "ticker_distinct_cas_recent": 5,
+        },
+    )
+    gate = score_discovery(storm)
+    assert gate.decision == CandidateDecision.reject
+    assert "clone_storm_ticker" in gate.reasons
+
+
+def test_annotate_clone_storm_from_peers():
+    from x_intel.discovery.clone_farm import annotate_clone_farm_hints
+
+    peers = [
+        _rec(ca=f"HELLoPeer{chr(65+i)}xxxx1111111111111111111111"[:44], ticker="HELLO", mc_usd=3000)
+        for i in range(4)
+    ]
+    rec = _rec(
+        ca="HELLoSefxxxxx11111111111111111111111111",
+        ticker="HELLO",
+        mc_usd=3100,
+        confidence_hints={
+            "pump_curve": True,
+            "verified_social": True,
+            "pump_twitter": "https://x.com/x/status/1",
+            "mc_source": "pump.fun",
+            "mc_live_early": True,
+        },
+    )
+    annotate_clone_farm_hints(rec, peers=peers)
+    assert rec.confidence_hints["clone_storm"] is True
+    assert rec.confidence_hints["spam_farm_ticker"] is True
+    assert rec.confidence_hints["ticker_distinct_cas_recent"] >= 3
+    gate = score_discovery(rec)
+    assert gate.decision == CandidateDecision.reject
+    assert has_publish_quality_evidence(rec) is False
+
+
+def test_unique_ticker_curve_social_still_eligible():
+    """First sight of a fresh ticker with profile twitter remains emit-eligible."""
+    fresh = _rec(
+        ca="FreshMintUniq11111111111111111111111112",
+        ticker="ZORBLX",
+        name="Zorblx Labs",
+        mc_usd=180_000,
+        confidence_hints={
+            "pump_curve": True,
+            "verified_social": True,
+            "pump_twitter": "https://x.com/zorblx_labs",
+            "mc_source": "pump.fun",
+            "mc_live_early": True,
+            "ticker_unique_recent": True,
+        },
+    )
+    assert has_publish_quality_evidence(fresh) is True
+    gate = score_discovery(fresh)
+    assert gate.decision == CandidateDecision.pursue
+    assert gate.pursue_eligible is True
+
+
+def test_scat_not_stamp_parasite_with_reinforcement():
+    """Shielded Cat stays non-parasite and can BUY with rising/profile reinforcement."""
+    from x_intel.discovery.clone_farm import is_profile_twitter
+
+    assert is_profile_twitter("https://x.com/Noorii__5")
+    assert not is_profile_twitter("https://x.com/Noorii__5/status/1")
+    scat = _rec(
+        ca=SCAT_CA,
+        ticker="SCAT",
+        name="Shielded Cat",
+        mc_usd=250_000,
+        confidence_hints={
+            "pump_curve": True,
+            "verified_social": True,
+            "pump_twitter": "https://x.com/Noorii__5",
+            "mc_source": "pump.fun",
+            "mc_rising": True,
+            "ticker_unique_recent": True,
+        },
+    )
+    assert detect_parasite_by_ca(scat) is None
+    assert has_publish_quality_evidence(scat) is True
