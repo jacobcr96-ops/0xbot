@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
+from x_intel.discovery.gates import has_publish_quality_evidence
+from x_intel.discovery.models import DiscoveryRecord
+from x_intel.discovery.parasite import detect_parasite_by_ca
 from x_intel.config import (
     DEFAULT_BUY_PERCENT_EQUITY,
     MIN_BUY_PERCENT_EQUITY,
@@ -152,7 +155,7 @@ def check_pursue_buy_gates(
     if not evidence:
         raise GateReject("multi-channel evidence empty")
 
-    # --- Publish-quality gate (age+MC alone is not enough) ---
+    # --- Publish-quality gate (same rules as discovery.gates) ---
     sources = [s for s in (candidate.source_accounts or []) if s]
     hints: dict[str, Any] = {}
     extra = getattr(candidate, "__pydantic_extra__", None) or {}
@@ -161,6 +164,11 @@ def check_pursue_buy_gates(
         for k in ("first_source", "sources", "gate_reasons", "gate_warnings"):
             if k in disc and k not in hints:
                 hints[k] = disc[k]
+        # Live enrich identity + social hints (pump twitter, mc_source, …)
+        ch = disc.get("confidence_hints") or {}
+        if isinstance(ch, dict):
+            for k, v in ch.items():
+                hints.setdefault(k, v)
         src_from_disc = disc.get("sources") or []
         if isinstance(src_from_disc, list) and src_from_disc:
             sources = list(dict.fromkeys([*sources, *[str(s) for s in src_from_disc]]))
@@ -168,34 +176,34 @@ def check_pursue_buy_gates(
     if fs is not None and fs.scores:
         for fid, entry in fs.scores.items():
             hints[fid] = entry.value
-    # evidence channels as soft sources
+    # evidence channels as soft sources (organic X posts only — not pump weak_narrative)
     channels = {e.channel for e in evidence}
     if "x_social" in channels and "x_social" not in sources:
         sources.append("x_social")
     if "onchain_flow" in channels and "flow_hint" not in sources:
         sources.append("flow_hint")
 
-    organic_x = ("x_social" in sources or hints.get("x_social") is True) and not (
-        hints.get("boost_only") is True or hints.get("paid_boost") is True
+    mc = candidate.mc_usd_at_first_sight
+    if mc is None and isinstance(disc, dict):
+        mc = disc.get("mc_usd")
+    rec = DiscoveryRecord(
+        chain=candidate.chain or "solana",
+        ca=candidate.contract_address,
+        first_source=(sources[0] if sources else "other"),
+        first_seen_at=candidate.first_seen_at,
+        sources=sources,
+        ticker=candidate.ticker,
+        name=(disc.get("name") if isinstance(disc, dict) else None),
+        symbol=(disc.get("symbol") if isinstance(disc, dict) else None),
+        mc_usd=float(mc) if mc is not None else None,
+        mc_source=(disc.get("mc_source") if isinstance(disc, dict) else None),
+        confidence_hints=hints,
     )
-    flow_pos = False
-    if "flow_hint" in sources or hints.get("flow_hint") is True:
-        if hints.get("sybil") is not True and hints.get("D1") is not True:
-            fbc = hints.get("first_buyer_count")
-            if hints.get("flow_positive") is True or hints.get("sybil") is False:
-                flow_pos = True
-            elif isinstance(fbc, (int, float)) and fbc > 0:
-                flow_pos = True
-    intel_pass = (
-        hints.get("multi_channel_pass") is True
-        or hints.get("S1") is True
-        or hints.get("S3") is True
-        or len({s for s in sources if s in {"x_social", "flow_hint", "pumpfun_curve"}}) >= 2
-    )
-    quality = organic_x or flow_pos or intel_pass
-
-    if hints.get("parasite_of_runner") is True or hints.get("parasite") is True:
+    if detect_parasite_by_ca(rec) or hints.get("parasite") is True or hints.get("parasite_of_runner") is True:
         raise GateReject("parasite_only — no emit")
+
+    quality = has_publish_quality_evidence(rec, hints)
+
     if (hints.get("boost_only") is True or hints.get("paid_boost") is True) and not quality:
         raise GateReject("boost_only_no_organic — no emit")
     non_lag = {s for s in sources if s and s != "fomo_sidebar"}
@@ -203,7 +211,8 @@ def check_pursue_buy_gates(
         raise GateReject("thin_dex_new_only — no emit")
     if not quality:
         raise GateReject(
-            "publish quality missing — need organic X, positive flow, or multi-channel intel"
+            "publish quality missing — need organic X, positive flow, multi-channel, "
+            "or curve+verified_social"
         )
 
     # Late / post-move must never emit BUY
