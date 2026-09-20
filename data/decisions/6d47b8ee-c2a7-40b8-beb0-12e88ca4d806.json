@@ -1,0 +1,49 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "6d47b8ee-c2a7-40b8-beb0-12e88ca4d806",
+  "action": "BUY",
+  "issued_at": "2026-09-20T20:54:25.530728Z",
+  "expires_at": "2026-09-20T20:59:25.530728Z",
+  "contract_address": "GTBxUiw6wJdmmkCGZgRHLyYxqu1vG4KtRpeox6yDpump",
+  "chain": "solana",
+  "ticker": "JEANPHIL",
+  "confidence": 0.4,
+  "thesis": "CALIBRATION SHADOW — historical JEANPHIL CA for pipe/schema test only. Not a live early entry (already graduated). 0xbot should shadowTrack, not size live until local arm+calibration.",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 0.25,
+    "max_slippage_bps": 150,
+    "urgency": "low"
+  },
+  "market_snapshot": {
+    "mc_usd": 5000000.0,
+    "price_usd": 0.005,
+    "liquidity_usd": 250000.0,
+    "volume_1h_usd": null,
+    "pair_age_minutes": 1500.0,
+    "as_of": "2026-09-20T20:54:25.530728Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "calibration replay of known runner CA for handoff verification",
+      "observed_at": "2026-09-20T20:54:25.530728Z",
+      "refs": null,
+      "weight": 0.5
+    },
+    {
+      "channel": "narrative",
+      "summary": "Historian case runner_jeanphil_sol — not early window",
+      "observed_at": "2026-09-20T20:54:25.530728Z",
+      "refs": null,
+      "weight": 0.5
+    }
+  ],
+  "risk_flags": [
+    "calibration_shadow",
+    "post_move_not_early"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "4f2597a0-0f05-49f3-82de-4de45ccea839",
+  "do_not_execute_until_armed": true
+}
