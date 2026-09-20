@@ -27,7 +27,7 @@ def default_sources(
     dd = Path(data_dir) if data_dir else None
     return [
         DexScreenerNewSource(fixture_dir=fd, live=live),
-        PumpfunCurveSource(fixture_dir=fd, live=live),
+        PumpfunCurveSource(fixture_dir=fd, live=live, data_dir=dd),
         XSocialSource(fixture_dir=fd, live=live),
         FomoSidebarSource(data_dir=dd, fixture_dir=fd),
         FlowHintSource(data_dir=dd, fixture_dir=fd),
