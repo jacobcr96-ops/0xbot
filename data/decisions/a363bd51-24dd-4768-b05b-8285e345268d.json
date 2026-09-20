@@ -1,0 +1,49 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "a363bd51-24dd-4768-b05b-8285e345268d",
+  "action": "BUY",
+  "issued_at": "2026-09-20T20:59:56.417725Z",
+  "expires_at": "2026-09-20T21:19:56.417725Z",
+  "contract_address": "GTBxUiw6wJdmmkCGZgRHLyYxqu1vG4KtRpeox6yDpump",
+  "chain": "solana",
+  "ticker": "JEANPHIL",
+  "confidence": 0.4,
+  "thesis": "CALIBRATION SHADOW v2 — schema/TTL/sizing check after round-trip. Not an early entry. shadowTrack only.",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": 150,
+    "urgency": "low"
+  },
+  "market_snapshot": {
+    "mc_usd": 5000000.0,
+    "price_usd": 0.005,
+    "liquidity_usd": 250000.0,
+    "volume_1h_usd": null,
+    "pair_age_minutes": 1500.0,
+    "as_of": "2026-09-20T20:59:56.417725Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "handoff calibration v2: 20m TTL + >=0.75% equity",
+      "observed_at": "2026-09-20T20:59:56.417725Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "narrative",
+      "summary": "post_move JEANPHIL CA for pipe validation only",
+      "observed_at": "2026-09-20T20:59:56.417725Z",
+      "refs": [],
+      "weight": 0.5
+    }
+  ],
+  "risk_flags": [
+    "calibration_shadow",
+    "post_move_not_early"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "925193b7-b2f7-45ee-b56d-5370b83e12ba",
+  "do_not_execute_until_armed": true
+}
