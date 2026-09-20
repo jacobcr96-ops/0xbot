@@ -1,4 +1,4 @@
-.PHONY: install test demo api mcp lint emit-buy ingest-reports ledger-status
+.PHONY: install test demo api mcp lint emit-buy ingest-reports ledger-status discovery-once discovery-validate
 
 VENV ?= .venv
 PY := $(VENV)/bin/python
@@ -32,3 +32,10 @@ emit-buy:
 
 ingest-reports:
 	$(PY) -m x_intel.ledger.execution_reports
+
+# Early-mover discovery (fixture/replay by default; still disarmed)
+discovery-once:
+	$(PY) -m x_intel.discovery.runner once
+
+discovery-validate:
+	$(PY) -m x_intel.discovery.validate
