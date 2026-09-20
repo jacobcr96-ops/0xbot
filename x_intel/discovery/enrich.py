@@ -316,6 +316,16 @@ def apply_quote_to_record(rec: Any, quote: dict[str, Any]) -> Any:
 
         if quote.get("complete") is True:
             hints["pump_complete"] = True
+
+        # Prefer chain create time when record lacks pair_created_at
+        if getattr(rec, "pair_created_at", None) is None and quote.get("created_timestamp") is not None:
+            try:
+                ts = float(quote["created_timestamp"])
+                if ts > 1e12:
+                    ts /= 1000.0
+                rec.pair_created_at = datetime.fromtimestamp(ts, tz=timezone.utc)
+            except (TypeError, ValueError, OSError):
+                pass
     else:
         feats["enrich_ok"] = False
         feats["enrich_errors"] = quote.get("errors") or ["unknown"]
