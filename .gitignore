@@ -10,3 +10,13 @@ build/
 data/fixtures/decisions/acks/
 *.log
 .DS_Store
+
+# runtime disk queue / reports (keep directories via .gitkeep)
+data/decisions/*.json
+data/decisions/inbox.jsonl
+data/decisions/acks/
+data/execution_reports/*.json
+!data/decisions/.gitkeep
+!data/execution_reports/.gitkeep
+data/outcomes/exec_*.json
+data/outcomes/_execution_ingest.jsonl

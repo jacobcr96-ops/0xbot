@@ -8,7 +8,7 @@ Tools (documented; stdio JSON-RPC minimal server):
   - ack_decision(decision_id, status)
 
 No wallets, keys, swaps, or order placement.
-All decisions carry do_not_execute_until_armed=true.
+Arming via XINTEL_ARMED; see x_intel.config.is_armed().
 
 Run: python -m x_intel.mcp_server.server
 """
@@ -21,7 +21,8 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
 
-from x_intel import DO_NOT_EXECUTE_UNTIL_ARMED, EXPERIMENT_ID
+from x_intel import EXPERIMENT_ID
+from x_intel.config import do_not_execute_until_armed, is_armed
 from x_intel.ledger.store import CandidateLedger
 from x_intel.schemas.models import is_decision_stale
 
@@ -55,7 +56,7 @@ class XIntelMCP:
 
     def list_tools(self) -> list[dict[str, Any]]:
         return [
-            {"name": name, **meta, "do_not_execute_until_armed": True}
+            {"name": name, **meta, "do_not_execute_until_armed": do_not_execute_until_armed()}
             for name, meta in TOOL_DOCS.items()
         ]
 
@@ -81,7 +82,8 @@ class XIntelMCP:
             decs = filtered
         return {
             "experiment_id": EXPERIMENT_ID,
-            "do_not_execute_until_armed": DO_NOT_EXECUTE_UNTIL_ARMED,
+            "do_not_execute_until_armed": do_not_execute_until_armed(),
+            "xintel_armed": is_armed(),
             "decisions": [
                 {**d.model_dump(mode="json"), "stale": is_decision_stale(d, now=now)}
                 for d in decs
@@ -143,7 +145,7 @@ def main() -> None:
             {
                 "server": "x_intel.mcp_server",
                 "experiment_id": EXPERIMENT_ID,
-                "do_not_execute_until_armed": True,
+                "do_not_execute_until_armed": do_not_execute_until_armed(),
                 "tools": mcp.list_tools(),
                 "usage": [
                     "python -m x_intel.mcp_server.server tools",

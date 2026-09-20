@@ -1,4 +1,4 @@
-"""Filesystem candidate ledger + decision store."""
+"""Filesystem candidate ledger + decision disk queue + execution reports."""
 
 from __future__ import annotations
 
@@ -9,26 +9,54 @@ from pathlib import Path
 from typing import Any, Iterator, Optional
 from uuid import UUID
 
-from x_intel.schemas.models import CandidateV1, DecisionV1, OutcomeFillV1
+from x_intel.config import data_dir, do_not_execute_until_armed
+from x_intel.io_atomic import append_jsonl, atomic_read_json, atomic_write_json
+from x_intel.schemas.models import (
+    CandidateV1,
+    DecisionV1,
+    ExecutionReportV1,
+    OutcomeFillV1,
+)
 
-SKIP_NAMES = {"_index.jsonl", "_TEMPLATE.json"}
+SKIP_NAMES = {"_index.jsonl", "_TEMPLATE.json", "inbox.jsonl"}
 
 
 @dataclass(frozen=True)
 class RepoPaths:
-    root: Path
+    """Paths under the configurable data root (XINTEL_DATA_DIR, default data/)."""
+
+    data: Path
+
+    @property
+    def root(self) -> Path:
+        """Repo root (parent of data/) when using default layout."""
+        return self.data.parent
 
     @property
     def candidates(self) -> Path:
-        return self.root / "data" / "candidates"
+        return self.data / "candidates"
 
     @property
     def outcomes(self) -> Path:
-        return self.root / "data" / "outcomes"
+        return self.data / "outcomes"
 
     @property
     def decisions(self) -> Path:
-        return self.root / "data" / "fixtures" / "decisions"
+        """Production disk decision queue (Tampermonkey / bridge reads here)."""
+        return self.data / "decisions"
+
+    @property
+    def decisions_inbox(self) -> Path:
+        return self.decisions / "inbox.jsonl"
+
+    @property
+    def fixture_decisions(self) -> Path:
+        """Legacy demo fixtures (still readable by list_decisions)."""
+        return self.data / "fixtures" / "decisions"
+
+    @property
+    def execution_reports(self) -> Path:
+        return self.data / "execution_reports"
 
     @property
     def reports(self) -> Path:
@@ -40,17 +68,12 @@ class RepoPaths:
 
 
 def default_paths(start: Optional[Path] = None) -> RepoPaths:
-    """Walk up from start (or this file) to find repo root with data/candidates."""
-    here = (start or Path(__file__)).resolve()
-    for p in [here, *here.parents]:
-        if (p / "data" / "candidates").is_dir():
-            return RepoPaths(root=p)
-    # fallback: package parent parents[2] = repo if x_intel/ledger/store.py
-    return RepoPaths(root=Path(__file__).resolve().parents[2])
+    """Resolve data root via XINTEL_DATA_DIR or repo walk."""
+    return RepoPaths(data=data_dir(start))
 
 
 class CandidateLedger:
-    """pursue/watch/reject logging + outcome overlays. Measurement only."""
+    """pursue/watch/reject logging + decision disk queue. Measurement / intents only."""
 
     def __init__(self, paths: Optional[RepoPaths] = None) -> None:
         self.paths = paths or default_paths()
@@ -72,7 +95,9 @@ class CandidateLedger:
     ) -> list[CandidateV1]:
         out: list[CandidateV1] = []
         for path in self._iter_candidate_files():
-            raw = json.loads(path.read_text())
+            raw = atomic_read_json(path)
+            if raw is None:
+                continue
             cand = CandidateV1.model_validate(raw)
             if decision and cand.decision.value != decision:
                 continue
@@ -90,14 +115,15 @@ class CandidateLedger:
 
     def get_candidate(self, candidate_id: str | UUID) -> Optional[CandidateV1]:
         path = self.paths.candidates / f"{candidate_id}.json"
-        if not path.exists():
+        raw = atomic_read_json(path)
+        if raw is None:
             return None
-        return CandidateV1.model_validate(json.loads(path.read_text()))
+        return CandidateV1.model_validate(raw)
 
     def save_candidate(self, candidate: CandidateV1, append_index: bool = True) -> Path:
         self.paths.candidates.mkdir(parents=True, exist_ok=True)
         path = self.paths.candidates / f"{candidate.candidate_id}.json"
-        path.write_text(candidate.model_dump_json(indent=2) + "\n")
+        atomic_write_json(path, candidate)
         if append_index:
             line = {
                 "candidate_id": str(candidate.candidate_id),
@@ -108,21 +134,34 @@ class CandidateLedger:
                 "experiment_id": candidate.experiment_id,
                 "logged_at": datetime.now(timezone.utc).isoformat(),
             }
-            with self.paths.index.open("a") as f:
-                f.write(json.dumps(line) + "\n")
+            append_jsonl(self.paths.index, line)
         return path
 
     def get_outcome(self, candidate_id: str | UUID) -> Optional[OutcomeFillV1]:
         path = self.paths.outcomes / f"{candidate_id}.json"
-        if not path.exists():
+        raw = atomic_read_json(path)
+        if raw is None:
             return None
-        return OutcomeFillV1.model_validate(json.loads(path.read_text()))
+        return OutcomeFillV1.model_validate(raw)
 
     def save_outcome(self, fill: OutcomeFillV1) -> Path:
         self.paths.outcomes.mkdir(parents=True, exist_ok=True)
         path = self.paths.outcomes / f"{fill.candidate_id}.json"
-        path.write_text(fill.model_dump_json(indent=2) + "\n")
+        atomic_write_json(path, fill)
         return path
+
+    def _decision_dirs(self) -> list[Path]:
+        """Production queue first, then legacy fixtures."""
+        dirs = [self.paths.decisions, self.paths.fixture_decisions]
+        seen: set[Path] = set()
+        out: list[Path] = []
+        for d in dirs:
+            rp = d.resolve()
+            if rp in seen:
+                continue
+            seen.add(rp)
+            out.append(d)
+        return out
 
     def list_decisions(
         self,
@@ -132,32 +171,69 @@ class CandidateLedger:
     ) -> list[DecisionV1]:
         from x_intel.schemas.models import is_decision_stale
 
-        ddir = self.paths.decisions
-        if not ddir.is_dir():
-            return []
         now = now or datetime.now(timezone.utc)
         out: list[DecisionV1] = []
-        for path in sorted(ddir.glob("*.json")):
-            if path.name.startswith("_"):
+        seen_ids: set[str] = set()
+        for ddir in self._decision_dirs():
+            if not ddir.is_dir():
                 continue
-            dec = DecisionV1.model_validate(json.loads(path.read_text()))
-            if dec.confidence < min_confidence:
-                continue
-            if unexpired_only and is_decision_stale(dec, now=now):
-                continue
-            out.append(dec)
+            for path in sorted(ddir.glob("*.json")):
+                if path.name.startswith("_") or path.name.endswith(".tmp"):
+                    continue
+                raw = atomic_read_json(path)
+                if raw is None:
+                    continue
+                dec = DecisionV1.model_validate(raw)
+                did = str(dec.decision_id)
+                if did in seen_ids:
+                    continue
+                seen_ids.add(did)
+                if dec.confidence < min_confidence:
+                    continue
+                if unexpired_only and is_decision_stale(dec, now=now):
+                    continue
+                out.append(dec)
         return out
 
     def get_decision(self, decision_id: str | UUID) -> Optional[DecisionV1]:
-        path = self.paths.decisions / f"{decision_id}.json"
-        if not path.exists():
-            return None
-        return DecisionV1.model_validate(json.loads(path.read_text()))
+        for ddir in self._decision_dirs():
+            path = ddir / f"{decision_id}.json"
+            raw = atomic_read_json(path)
+            if raw is None:
+                continue
+            return DecisionV1.model_validate(raw)
+        return None
 
-    def save_decision(self, decision: DecisionV1) -> Path:
+    def save_decision(
+        self,
+        decision: DecisionV1,
+        *,
+        append_inbox: bool = True,
+    ) -> Path:
+        """Atomically write decision to production disk queue ``data/decisions/``.
+
+        Never leaves partial JSON under the final name. Optionally appends
+        ``data/decisions/inbox.jsonl`` index line (flushed).
+        """
         self.paths.decisions.mkdir(parents=True, exist_ok=True)
         path = self.paths.decisions / f"{decision.decision_id}.json"
-        path.write_text(decision.model_dump_json(indent=2) + "\n")
+        atomic_write_json(path, decision)
+        if append_inbox:
+            append_jsonl(
+                self.paths.decisions_inbox,
+                {
+                    "decision_id": str(decision.decision_id),
+                    "action": decision.action.value,
+                    "issued_at": decision.issued_at.isoformat(),
+                    "expires_at": decision.expires_at.isoformat(),
+                    "contract_address": decision.contract_address,
+                    "chain": decision.chain,
+                    "confidence": decision.confidence,
+                    "candidate_id": decision.candidate_id,
+                    "do_not_execute_until_armed": decision.do_not_execute_until_armed,
+                    "queued_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
         return path
 
     def ack_decision(
@@ -180,10 +256,37 @@ class CandidateLedger:
             "status": status,
             "acked_at": datetime.now(timezone.utc).isoformat(),
             "note": note,
-            "do_not_execute_until_armed": True,
+            "do_not_execute_until_armed": do_not_execute_until_armed(),
         }
-        (ack_dir / f"{decision_id}.json").write_text(json.dumps(record, indent=2) + "\n")
+        atomic_write_json(ack_dir / f"{decision_id}.json", record)
         return record
+
+    def save_execution_report(self, report: ExecutionReportV1) -> Path:
+        self.paths.execution_reports.mkdir(parents=True, exist_ok=True)
+        path = self.paths.execution_reports / f"{report.report_id}.json"
+        atomic_write_json(path, report)
+        return path
+
+    def get_execution_report(self, report_id: str | UUID) -> Optional[ExecutionReportV1]:
+        path = self.paths.execution_reports / f"{report_id}.json"
+        raw = atomic_read_json(path)
+        if raw is None:
+            return None
+        return ExecutionReportV1.model_validate(raw)
+
+    def list_execution_reports(self) -> list[ExecutionReportV1]:
+        ddir = self.paths.execution_reports
+        if not ddir.is_dir():
+            return []
+        out: list[ExecutionReportV1] = []
+        for path in sorted(ddir.glob("*.json")):
+            if path.name.startswith("_") or path.name.endswith(".tmp"):
+                continue
+            raw = atomic_read_json(path)
+            if raw is None:
+                continue
+            out.append(ExecutionReportV1.model_validate(raw))
+        return out
 
     def account_leaderboard_stub(self) -> dict[str, Any]:
         """Stub leaderboard from candidates' source_accounts (n only until outcomes fill)."""

@@ -12,7 +12,8 @@ from uuid import UUID
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from x_intel import DO_NOT_EXECUTE_UNTIL_ARMED, EXPERIMENT_ID, __version__
+from x_intel import EXPERIMENT_ID, __version__
+from x_intel.config import do_not_execute_until_armed, is_armed
 from x_intel.ledger.store import CandidateLedger
 from x_intel.schemas.models import is_decision_stale
 
@@ -20,7 +21,7 @@ app = FastAPI(
     title="x_intel",
     description=(
         "Intelligence / decision layer for 0xbot. "
-        "Emits intents only; do_not_execute_until_armed=true. "
+        "Emits intents only; arm via XINTEL_ARMED. "
         f"experiment_id={EXPERIMENT_ID}"
     ),
     version=__version__,
@@ -42,7 +43,8 @@ def health() -> dict[str, Any]:
         "service": "x_intel",
         "version": __version__,
         "experiment_id": EXPERIMENT_ID,
-        "do_not_execute_until_armed": DO_NOT_EXECUTE_UNTIL_ARMED,
+        "do_not_execute_until_armed": do_not_execute_until_armed(),
+        "xintel_armed": is_armed(),
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -81,7 +83,8 @@ def list_decisions(
     )
     return {
         "experiment_id": EXPERIMENT_ID,
-        "do_not_execute_until_armed": True,
+        "do_not_execute_until_armed": do_not_execute_until_armed(),
+        "xintel_armed": is_armed(),
         "count": len(decs),
         "decisions": [
             {

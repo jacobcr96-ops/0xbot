@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "XIntelDecisionV1",
-  "description": "Machine-readable handoff from Grok intelligence layer to 0xbot execution. 0xbot validates balances, places orders, and enforces hard safety. Intelligence never executes.",
+  "description": "Machine-readable handoff from Grok intelligence layer to 0xbot execution. 0xbot validates balances, places orders, and enforces hard safety. Intelligence never executes. BUY/ADD default expires_at = issued_at + 5 minutes (bridge RTT 5–15s).",
   "type": "object",
   "required": [
     "schema_version",
@@ -21,7 +21,11 @@
     "decision_id": { "type": "string", "format": "uuid" },
     "action": { "enum": ["BUY", "ADD", "REDUCE", "EXIT", "HOLD"] },
     "issued_at": { "type": "string", "format": "date-time" },
-    "expires_at": { "type": "string", "format": "date-time", "description": "Hard staleness cutoff. 0xbot MUST ignore if now > expires_at." },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Hard staleness cutoff. BUY/ADD default TTL 300s. 0xbot MUST ignore if now > expires_at."
+    },
     "contract_address": { "type": "string" },
     "chain": {
       "enum": ["solana", "base", "bsc", "ethereum", "arbitrum", "avalanche", "polygon", "ton", "tron", "sui", "other"]
@@ -70,6 +74,9 @@
     "risk_flags": { "type": "array", "items": { "type": "string" } },
     "experiment_id": { "type": "string", "description": "Versioned strategy/experiment boundary for expectancy tracking." },
     "candidate_id": { "type": "string" },
-    "do_not_execute_until_armed": { "type": "boolean", "const": true }
+    "do_not_execute_until_armed": {
+      "type": "boolean",
+      "description": "Must be true unless XINTEL_ARMED=true. Arming is the intentional live-risk switch."
+    }
   }
 }
