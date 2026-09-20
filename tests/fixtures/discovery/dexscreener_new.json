@@ -1,0 +1,25 @@
+{
+  "pairs": [
+    {
+      "chain": "solana",
+      "ca": "Ear1yDiscoSo11111111111111111111111111112",
+      "ticker": "EARLY",
+      "discovered_at": "2026-09-20T19:00:00+00:00",
+      "pair_created_at": "2026-09-20T18:55:00+00:00",
+      "mc_usd": 42000,
+      "liquidity_usd": 12000,
+      "raw_ref": "fixture:dex:early",
+      "event_kind": "new_pair"
+    },
+    {
+      "chain": "base",
+      "ca": "0xabcdeffedcbaabcdeffedcbaabcdeffedcbaabcd",
+      "ticker": "BASEY",
+      "discovered_at": "2026-09-20T19:01:00+00:00",
+      "pair_created_at": "2026-09-20T18:50:00+00:00",
+      "mc_usd": 800000,
+      "liquidity_usd": 50000,
+      "raw_ref": "fixture:dex:basey"
+    }
+  ]
+}

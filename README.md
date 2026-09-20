@@ -21,6 +21,8 @@ make api              # uvicorn x_intel.api.main:app on :8080
 make mcp              # list MCP handoff tools
 make emit-buy CANDIDATE=<id>   # pursue→BUY → data/decisions/
 make ingest-reports   # load execution_report.v1 → outcomes
+make discovery-once    # poll discovery sources once (disarmed)
+make discovery-validate
 ```
 
 Or manually:
@@ -64,6 +66,7 @@ x_intel/
   research/     # historical cases / hypotheses loaders
   ingest/       # X + market interfaces (fixture/replay mode)
   emit/         # pursue→BUY emitter (disk queue)
+  discovery/    # early-mover bus (dex/pump/X/FOMO/flow)
   config.py     # XINTEL_DATA_DIR, XINTEL_ARMED
 docs/           # ARCHITECTURE, integration, outcome protocol, feature registry
 reports/        # BATCH_01 case files, signal hypotheses, leaderboard

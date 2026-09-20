@@ -1,0 +1,27 @@
+{
+  "events": [
+    {
+      "chain": "solana",
+      "ca": "PumpCurv111111111111111111111111111111pump",
+      "ticker": "CURVE",
+      "discovered_at": "2026-09-20T19:00:30+00:00",
+      "pair_created_at": "2026-09-20T18:58:00+00:00",
+      "mc_usd": 15000,
+      "curve_progress": 0.42,
+      "liquidity_usd": 8000,
+      "event_kind": "curve_new",
+      "confidence_hints": {"pump_curve": true}
+    },
+    {
+      "chain": "solana",
+      "ca": "PumpGrad111111111111111111111111111111pump",
+      "ticker": "GRAD",
+      "discovered_at": "2026-09-20T19:02:00+00:00",
+      "pair_created_at": "2026-09-20T18:40:00+00:00",
+      "mc_usd": 90000,
+      "curve_progress": 1.0,
+      "event_kind": "graduate",
+      "confidence_hints": {"pump_curve": true}
+    }
+  ]
+}

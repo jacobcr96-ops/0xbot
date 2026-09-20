@@ -1,0 +1,12 @@
+{
+  "events": [
+    {
+      "chain": "solana",
+      "ca": "Ear1yDiscoSo11111111111111111111111111112",
+      "ticker": "EARLY",
+      "text": "just launched CA Ear1yDiscoSo11111111111111111111111111112",
+      "discovered_at": "2026-09-20T19:10:00+00:00",
+      "raw_ref": "post:fixture:1"
+    }
+  ]
+}
