@@ -1,0 +1,130 @@
+{
+  "schema_version": "xintel.candidate.v1",
+  "candidate_id": "72c78f03-b88d-499a-ab42-194d4f782668",
+  "first_seen_at": "2026-09-20T19:30:26Z",
+  "contract_address": "0x2bc4497ca2e708c1515d3d26c1bb96dc74937777",
+  "chain": "bsc",
+  "ticker": "GRAPHENEOS",
+  "mc_usd_at_first_sight": null,
+  "price_usd_at_first_sight": null,
+  "decision": "reject",
+  "reject_reason": "Brandjack privacy-OS meta; trend-radar shill; clone swarm \u2014 parked after Narrative 4/10 meta",
+  "evidence": [
+    {
+      "channel": "x_social",
+      "summary": "BSCTrendRadar multi-radar chatter, ~239 holders claimed unverified",
+      "observed_at": "2026-09-20T19:30:26Z",
+      "refs": [
+        "https://x.com/BSCTrendRadar/status/2101744795769078000"
+      ]
+    },
+    {
+      "channel": "narrative",
+      "summary": "Initially 5/10 then clone-swarm meta 4/10 \u2014 no originality",
+      "observed_at": "2026-09-20T19:30:26Z"
+    }
+  ],
+  "source_accounts": [
+    "BSCTrendRadar"
+  ],
+  "experiment_id": "xintel_v0",
+  "outcomes": {
+    "ret_5m": null,
+    "ret_15m": null,
+    "ret_1h": null,
+    "ret_6h": null,
+    "ret_24h": null,
+    "max_runup": null,
+    "max_drawdown": null
+  },
+  "feature_scores": {
+    "schema_version": "xintel.feature_scores.v1",
+    "experiment_id": "xintel_v0",
+    "batch": "BATCH_01",
+    "provisional": true,
+    "scored_at": "2026-09-20T19:35:00Z",
+    "scored_by": "Outcome Desk backfill from Narrative room evidence",
+    "scores": {
+      "D1": {
+        "feature_id": "D1",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Flow",
+        "notes": null,
+        "observed_at": null
+      },
+      "S2": {
+        "feature_id": "S2",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": null,
+        "observed_at": null
+      },
+      "S3": {
+        "feature_id": "S3",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "X Scout",
+        "notes": null,
+        "observed_at": null
+      },
+      "S4": {
+        "feature_id": "S4",
+        "value": null,
+        "direction": "context",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Market",
+        "notes": null,
+        "observed_at": null
+      },
+      "D2": {
+        "feature_id": "D2",
+        "value": true,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": "Brandjack privacy-OS meta / clone swarm \u2014 post-leader / trend-copy cohort, not original lane.",
+        "observed_at": "2026-09-20T19:30:26Z"
+      },
+      "S5": {
+        "feature_id": "S5",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Flow",
+        "notes": null,
+        "observed_at": null
+      },
+      "D4": {
+        "feature_id": "D4",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Market",
+        "notes": null,
+        "observed_at": null
+      },
+      "S1": {
+        "feature_id": "S1",
+        "value": null,
+        "direction": "context",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": null,
+        "observed_at": null
+      }
+    }
+  }
+}

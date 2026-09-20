@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "XIntelOutcomeFillV1",
+  "description": "Standalone outcome fill record written by Outcome Desk. Measurement only — never trade.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "filled_at",
+    "fill_status",
+    "experiment_id"
+  ],
+  "properties": {
+    "schema_version": { "const": "xintel.outcome_fill.v1" },
+    "candidate_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Matches data/candidates/{candidate_id}.json"
+    },
+    "filled_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp of this fill write / last update"
+    },
+    "fill_status": {
+      "enum": ["pending", "partial", "complete", "unavailable"],
+      "description": "pending=no prices yet; partial=some horizons; complete=all horizons+extrema; unavailable=cannot fill (delisted, no pair, etc.)"
+    },
+    "experiment_id": {
+      "type": "string",
+      "description": "Must match the candidate's experiment_id (default xintel_v0)"
+    },
+    "price_sources": {
+      "type": "array",
+      "description": "Where prices were pulled from for this fill",
+      "items": {
+        "type": "object",
+        "required": ["source", "queried_at"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "e.g. dexscreener, birdeye, onchain, manual"
+          },
+          "pair_or_pool": { "type": ["string", "null"] },
+          "queried_at": { "type": "string", "format": "date-time" },
+          "base_price_usd": {
+            "type": ["number", "null"],
+            "description": "Price at first_seen used as return baseline, if captured here"
+          },
+          "notes": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "returns": {
+      "type": "object",
+      "description": "Fractional returns from first_seen_at price (0.25 = +25%)",
+      "properties": {
+        "ret_5m": { "type": ["number", "null"] },
+        "ret_15m": { "type": ["number", "null"] },
+        "ret_1h": { "type": ["number", "null"] },
+        "ret_6h": { "type": ["number", "null"] },
+        "ret_24h": { "type": ["number", "null"] }
+      }
+    },
+    "max_runup": {
+      "type": ["number", "null"],
+      "description": "Peak fractional return from first_seen through 24h window (or until LP rug)"
+    },
+    "max_drawdown": {
+      "type": ["number", "null"],
+      "description": "Worst fractional drawdown from first_seen through same window"
+    },
+    "horizon_filled_at": {
+      "type": "object",
+      "description": "Per-horizon timestamps when each return was filled",
+      "properties": {
+        "ret_5m": { "type": ["string", "null"], "format": "date-time" },
+        "ret_15m": { "type": ["string", "null"], "format": "date-time" },
+        "ret_1h": { "type": ["string", "null"], "format": "date-time" },
+        "ret_6h": { "type": ["string", "null"], "format": "date-time" },
+        "ret_24h": { "type": ["string", "null"], "format": "date-time" },
+        "max_runup": { "type": ["string", "null"], "format": "date-time" },
+        "max_drawdown": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "lp_rug_detected_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "If set, window ends here; later horizons stay null"
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "description": "Free-text: data gaps, rug details, source caveats"
+    }
+  }
+}

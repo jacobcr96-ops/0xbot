@@ -1,0 +1,42 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "7b91e09d-2f1e-4ed9-b4e2-5c121d665a3e",
+  "action": "BUY",
+  "issued_at": "2026-09-20T19:08:58.803125Z",
+  "expires_at": "2026-09-20T19:13:58.803125Z",
+  "contract_address": "EKtmPPLaCbEEKiwoHHtV7TsRsmPXs5CMGtQtZFSiinsc",
+  "chain": "solana",
+  "ticker": "STAMP",
+  "confidence": 0.55,
+  "thesis": "STALE fixture BUY \u2014 must be ignored by 0xbot (expired).",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 0.5,
+    "max_slippage_bps": 100,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 2850000,
+    "price_usd": 0.0028,
+    "liquidity_usd": 200000,
+    "volume_1h_usd": null,
+    "pair_age_minutes": 180,
+    "as_of": "2026-09-20T19:38:58.803125Z"
+  },
+  "evidence": [
+    {
+      "channel": "x_social",
+      "summary": "Fixture evidence from demo candidate STAMP",
+      "observed_at": "2026-09-20T19:38:58.803125Z",
+      "refs": [],
+      "weight": 0.5
+    }
+  ],
+  "risk_flags": [
+    "serial_deployer",
+    "demo_fixture"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "20e95639-c11e-4931-8ee8-68beadaef0ae",
+  "do_not_execute_until_armed": true
+}

@@ -1,0 +1,130 @@
+{
+  "schema_version": "xintel.candidate.v1",
+  "candidate_id": "8b04afa7-7042-4441-af01-6e9956a59d82",
+  "first_seen_at": "2026-09-20T19:30:26Z",
+  "contract_address": "F7Rwc7mAomwqABLFc3aX4eDkwEELGKeez3fMpw4qpump",
+  "chain": "solana",
+  "ticker": "JEANINU",
+  "mc_usd_at_first_sight": null,
+  "price_usd_at_first_sight": null,
+  "decision": "reject",
+  "reject_reason": "Day-one self-launch Inu clone; brand-new deployer; narrative 3/10",
+  "evidence": [
+    {
+      "channel": "x_social",
+      "summary": "Self-launch acct today via @JeanInuSol",
+      "observed_at": "2026-09-20T19:30:26Z",
+      "refs": [
+        "https://x.com/JeanInuSol/status/2101675456756117896"
+      ]
+    },
+    {
+      "channel": "narrative",
+      "summary": "Narrative 3/10 \u2014 recycled Inu, no organic lore; Market Check skip",
+      "observed_at": "2026-09-20T19:30:26Z"
+    }
+  ],
+  "source_accounts": [
+    "JeanInuSol"
+  ],
+  "experiment_id": "xintel_v0",
+  "outcomes": {
+    "ret_5m": null,
+    "ret_15m": null,
+    "ret_1h": null,
+    "ret_6h": null,
+    "ret_24h": null,
+    "max_runup": null,
+    "max_drawdown": null
+  },
+  "feature_scores": {
+    "schema_version": "xintel.feature_scores.v1",
+    "experiment_id": "xintel_v0",
+    "batch": "BATCH_01",
+    "provisional": true,
+    "scored_at": "2026-09-20T19:35:00Z",
+    "scored_by": "Outcome Desk backfill from Narrative room evidence",
+    "scores": {
+      "D1": {
+        "feature_id": "D1",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Flow",
+        "notes": null,
+        "observed_at": null
+      },
+      "S2": {
+        "feature_id": "S2",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": null,
+        "observed_at": null
+      },
+      "S3": {
+        "feature_id": "S3",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "X Scout",
+        "notes": null,
+        "observed_at": null
+      },
+      "S4": {
+        "feature_id": "S4",
+        "value": null,
+        "direction": "context",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Market",
+        "notes": null,
+        "observed_at": null
+      },
+      "D2": {
+        "feature_id": "D2",
+        "value": true,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": "Day-one self-launch Inu clone / recycled Inu \u2014 explicit post-leader category copycat.",
+        "observed_at": "2026-09-20T19:30:26Z"
+      },
+      "S5": {
+        "feature_id": "S5",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Flow",
+        "notes": null,
+        "observed_at": null
+      },
+      "D4": {
+        "feature_id": "D4",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Market",
+        "notes": null,
+        "observed_at": null
+      },
+      "S1": {
+        "feature_id": "S1",
+        "value": false,
+        "direction": "context",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": "Narrative: no organic lore; brand-new deployer self-launch \u2014 no pre-mint cultural prior fit.",
+        "observed_at": "2026-09-20T19:30:26Z"
+      }
+    }
+  }
+}

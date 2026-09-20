@@ -1,0 +1,120 @@
+{
+  "schema_version": "xintel.candidate.v1",
+  "candidate_id": "eb6fd339-cdb2-4c0d-a6d5-bba28e65c642",
+  "first_seen_at": "2026-09-20T19:30:26Z",
+  "contract_address": "UNKNOWN_PENDING",
+  "chain": "solana",
+  "ticker": "RISE",
+  "mc_usd_at_first_sight": null,
+  "price_usd_at_first_sight": null,
+  "decision": "reject",
+  "reject_reason": "Generic pump.fun early/thin; narrative 3/10 no lore \u2014 parked. CA not pinned in room.",
+  "evidence": [
+    {
+      "channel": "narrative",
+      "summary": "3/10 skip until story appears",
+      "observed_at": "2026-09-20T19:30:26Z"
+    }
+  ],
+  "source_accounts": [],
+  "experiment_id": "xintel_v0",
+  "outcomes": {
+    "ret_5m": null,
+    "ret_15m": null,
+    "ret_1h": null,
+    "ret_6h": null,
+    "ret_24h": null,
+    "max_runup": null,
+    "max_drawdown": null
+  },
+  "feature_scores": {
+    "schema_version": "xintel.feature_scores.v1",
+    "experiment_id": "xintel_v0",
+    "batch": "BATCH_01",
+    "provisional": true,
+    "scored_at": "2026-09-20T19:35:00Z",
+    "scored_by": "Outcome Desk stub \u2014 insufficient room evidence",
+    "scores": {
+      "D1": {
+        "feature_id": "D1",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Flow",
+        "notes": null,
+        "observed_at": null
+      },
+      "S2": {
+        "feature_id": "S2",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": null,
+        "observed_at": null
+      },
+      "S3": {
+        "feature_id": "S3",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "X Scout",
+        "notes": null,
+        "observed_at": null
+      },
+      "S4": {
+        "feature_id": "S4",
+        "value": null,
+        "direction": "context",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Market",
+        "notes": null,
+        "observed_at": null
+      },
+      "D2": {
+        "feature_id": "D2",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": null,
+        "observed_at": null
+      },
+      "S5": {
+        "feature_id": "S5",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Flow",
+        "notes": null,
+        "observed_at": null
+      },
+      "D4": {
+        "feature_id": "D4",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Market",
+        "notes": null,
+        "observed_at": null
+      },
+      "S1": {
+        "feature_id": "S1",
+        "value": null,
+        "direction": "context",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": null,
+        "observed_at": null
+      }
+    }
+  }
+}

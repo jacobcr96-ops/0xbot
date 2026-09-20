@@ -1,0 +1,20 @@
+{
+  "candidate_id": "20e95639-c11e-4931-8ee8-68beadaef0ae",
+  "ticker": "STAMP",
+  "kind": "flow_baseline",
+  "observed_at": "2026-09-20T19:31:00Z",
+  "source": "Flow Desk",
+  "payload": {
+    "launch": "pump.fun ~11:25 PT \u2192 PumpSwap ~11:44 PT",
+    "token_standard": "Token-2022",
+    "mint_freeze": "revoked",
+    "creator": "26oK69pYx7R25ULts9hLYF2HpTnZ421jPYMPsds9GtYA",
+    "creator_note": "serial Pump deployer 5+ prior low-MC",
+    "rugcheck_insiders": 8,
+    "liq_usd": {
+      "STAMP_ZEC_pumpswap": 174000,
+      "STAMP_SOL_meteora": 135000
+    },
+    "flow_call": "watch"
+  }
+}
