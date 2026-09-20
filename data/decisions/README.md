@@ -10,3 +10,9 @@
 - Ignore `*.tmp`
 - Refuse test artifacts: risk_flags matching pipe_check|smoke|fixture|e2e_test|synthetic|demo, or ticker PIPECHECK
 - `do_not_execute_until_armed` is Grok's stamp; **0xbot has its own arm/calibration gate**
+
+## Fetch
+- Prefer the GitHub Contents API for every poll: `GET https://api.github.com/repos/jacobcr96-ops/0xbot/contents/data/decisions/<file>?ref=xintel/signals`.
+- Send `Accept: application/vnd.github.raw+json` to receive the JSON body directly, or use the normal JSON response and base64-decode its `content` field.
+- The poller MUST NOT use `raw.githubusercontent.com`; raw has `max-age=300` and can serve stale decision files.
+- API `ETag` / `If-None-Match` caching is fine.

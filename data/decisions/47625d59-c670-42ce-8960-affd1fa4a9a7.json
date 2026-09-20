@@ -1,0 +1,52 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "47625d59-c670-42ce-8960-affd1fa4a9a7",
+  "action": "BUY",
+  "issued_at": "2026-09-20T21:09:34.724774Z",
+  "expires_at": "2026-09-20T21:29:34.724774Z",
+  "contract_address": "2G1UdC3xGk3meTrKCVe2njbtRteWieAj1K3ALTNupump",
+  "chain": "solana",
+  "ticker": "STCAT",
+  "confidence": 0.32,
+  "thesis": "Shadow early intent only: STCAT is a live Solana pump-curve token at ~1 minute and ~$3.32k MC with complete=false. One real X launch post is present but engagement is thin and first-buyer flow could not be verified; no live execution.",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 0.75,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 3319.9770188912125,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": 1.0120795666666667,
+    "as_of": "2026-09-20T21:09:34.724774Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "Live Pump.fun coin metadata at 2026-09-20T21:09:34.724774+00:00: STCAT created 2026-09-20T21:08:34+00:00 (1.01m old), USD market cap $3,319.98, bonding curve incomplete (complete=false); reply_count=0. First-buyer flow was not available from the public endpoint.",
+      "observed_at": "2026-09-20T21:09:34.724774Z",
+      "refs": [],
+      "weight": 0.7
+    },
+    {
+      "channel": "x_social",
+      "summary": "Thin but real X launch evidence: @asdfhgdev_pf posted the STCAT launch at 2026-09-20T21:08:25Z; query returned 43 impressions and zero likes, replies, quotes, or reposts at observation.",
+      "observed_at": "2026-09-20T21:08:25Z",
+      "refs": [],
+      "weight": 0.3
+    }
+  ],
+  "risk_flags": [
+    "calibration_shadow",
+    "shadow_only",
+    "thin_x_evidence",
+    "first_buyer_flow_unavailable",
+    "pump_curve_incomplete"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": null,
+  "do_not_execute_until_armed": true
+}
