@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "XIntelCandidateV1",
+  "description": "Every detected candidate including rejects \u2014 for prospective measurement.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "first_seen_at",
+    "contract_address",
+    "chain",
+    "decision",
+    "mc_usd_at_first_sight",
+    "evidence",
+    "experiment_id"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "xintel.candidate.v1"
+    },
+    "candidate_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "first_seen_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "contract_address": {
+      "type": "string"
+    },
+    "chain": {
+      "type": "string"
+    },
+    "ticker": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mc_usd_at_first_sight": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "price_usd_at_first_sight": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "decision": {
+      "enum": [
+        "pursue",
+        "watch",
+        "reject"
+      ]
+    },
+    "reject_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence": {
+      "type": "array"
+    },
+    "source_accounts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "experiment_id": {
+      "type": "string"
+    },
+    "outcomes": {
+      "type": "object",
+      "description": "Filled by outcome tracker; returns from first_seen",
+      "properties": {
+        "ret_5m": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ret_15m": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ret_1h": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ret_6h": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ret_24h": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max_runup": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max_drawdown": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "feature_scores": {
+      "description": "Optional BATCH_01+ provisional feature scores at detection time. See schemas/feature_scores_v1.json and docs/FEATURE_REGISTRY_v0.md. Observable-at-T only; nulls preferred over guesses. Absence is allowed (legacy candidates).",
+      "$ref": "feature_scores_v1.json"
+    }
+  }
+}

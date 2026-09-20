@@ -1,0 +1,42 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "55ecc0b1-be9d-4e3c-9dc5-5de3e25f0446",
+  "action": "HOLD",
+  "issued_at": "2026-09-20T19:38:58.803125Z",
+  "expires_at": "2026-09-20T19:43:58.803125Z",
+  "contract_address": "EKtmPPLaCbEEKiwoHHtV7TsRsmPXs5CMGtQtZFSiinsc",
+  "chain": "solana",
+  "ticker": "STAMP",
+  "confidence": 0.35,
+  "thesis": "Fixture HOLD \u2014 mid-cap privacy hitch, serial deployer risk; demo only.",
+  "sizing_intent": {
+    "mode": "hold",
+    "value": null,
+    "max_slippage_bps": null,
+    "urgency": "low"
+  },
+  "market_snapshot": {
+    "mc_usd": 2850000,
+    "price_usd": 0.0028,
+    "liquidity_usd": 200000,
+    "volume_1h_usd": null,
+    "pair_age_minutes": 180,
+    "as_of": "2026-09-20T19:38:58.803125Z"
+  },
+  "evidence": [
+    {
+      "channel": "x_social",
+      "summary": "Fixture evidence from demo candidate STAMP",
+      "observed_at": "2026-09-20T19:38:58.803125Z",
+      "refs": [],
+      "weight": 0.5
+    }
+  ],
+  "risk_flags": [
+    "serial_deployer",
+    "demo_fixture"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "20e95639-c11e-4931-8ee8-68beadaef0ae",
+  "do_not_execute_until_armed": true
+}

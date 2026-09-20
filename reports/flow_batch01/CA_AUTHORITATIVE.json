@@ -1,0 +1,18 @@
+{
+  "deaths": {
+    "SHAR": "9jZgvgS2bWtQiYzv48GcWzY4tnkeRSANbTm8Kp1LmSyS",
+    "DORAE": "F6s6hxSW6yWF4h5YBbW28JHLFEGXKYbEmungaTPtpump",
+    "JUSTICE": "DGagMywvLG3DwffZHX4eWWE6svnoJpiod3dSNBDwpump",
+    "GPT2": "4B3NXEKgsT9hsadpCKNEwSXj6aDqwR7iqe5GzvgKpump",
+    "PESTO": "34a8ALsPmbWxp7D3bQ6erERrCLz1ahr6u6o66Udmpump"
+  },
+  "runners": {
+    "WIF": "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm",
+    "POPCAT": "7GCihgDB8fe6KNjn2MYtkzZcRjQy3t9GHdC8uHYmW2hr",
+    "GOAT": "CzLSujWBLFsSjncfkh59rUFqvafWcY5tzedWJSuypump",
+    "PNUT": "2qEHjDLDLbuBgRYvsxhc5D6uDWAivNFZGan56P1tpump",
+    "MOODENG": "ED5nyyWEzpPPiWimP8vYm7sD7TD3LAt3Q3gRTWHzPJBY"
+  },
+  "source": "/workspace/x-intel/reports/cases/*.md (contract_address fields; matches BATCH_01_INDEX)",
+  "note": "Verify each via DexScreener. If INDEX mint empty, resolve and document conflict. Canonical dogwifhat is often EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm \u2014 if case WIF differs, prefer DexScreener-resolved and note."
+}

@@ -1,0 +1,122 @@
+{
+  "schema_version": "xintel.candidate.v1",
+  "candidate_id": "00000000-0000-4000-8000-000000000000",
+  "first_seen_at": "2026-01-01T00:00:00Z",
+  "contract_address": "TEMPLATE_NOT_A_REAL_CA",
+  "chain": "solana",
+  "ticker": "TEMPLATE",
+  "mc_usd_at_first_sight": null,
+  "price_usd_at_first_sight": null,
+  "decision": "reject",
+  "reject_reason": "TEMPLATE \u2014 not a real candidate; copy and replace all fields before logging",
+  "evidence": [
+    {
+      "channel": "x_social",
+      "summary": "TEMPLATE placeholder evidence \u2014 do not use for measurement",
+      "observed_at": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "source_accounts": [
+    "_TEMPLATE_"
+  ],
+  "experiment_id": "xintel_v0",
+  "outcomes": {
+    "ret_5m": null,
+    "ret_15m": null,
+    "ret_1h": null,
+    "ret_6h": null,
+    "ret_24h": null,
+    "max_runup": null,
+    "max_drawdown": null
+  },
+  "feature_scores": {
+    "schema_version": "xintel.feature_scores.v1",
+    "experiment_id": "xintel_v0",
+    "batch": "BATCH_01",
+    "provisional": true,
+    "scored_at": "2026-01-01T00:00:00Z",
+    "scored_by": "TEMPLATE",
+    "scores": {
+      "D1": {
+        "feature_id": "D1",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Flow",
+        "notes": "TEMPLATE \u2014 set value at detection or leave null",
+        "observed_at": "2026-01-01T00:00:00Z"
+      },
+      "S2": {
+        "feature_id": "S2",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": "TEMPLATE \u2014 set value at detection or leave null",
+        "observed_at": "2026-01-01T00:00:00Z"
+      },
+      "S3": {
+        "feature_id": "S3",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "X Scout",
+        "notes": "TEMPLATE \u2014 set value at detection or leave null",
+        "observed_at": "2026-01-01T00:00:00Z"
+      },
+      "S4": {
+        "feature_id": "S4",
+        "value": null,
+        "direction": "context",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Market",
+        "notes": "TEMPLATE \u2014 set value at detection or leave null",
+        "observed_at": "2026-01-01T00:00:00Z"
+      },
+      "D2": {
+        "feature_id": "D2",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": "TEMPLATE \u2014 set value at detection or leave null",
+        "observed_at": "2026-01-01T00:00:00Z"
+      },
+      "S5": {
+        "feature_id": "S5",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Flow",
+        "notes": "TEMPLATE \u2014 set value at detection or leave null",
+        "observed_at": "2026-01-01T00:00:00Z"
+      },
+      "D4": {
+        "feature_id": "D4",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Market",
+        "notes": "TEMPLATE \u2014 set value at detection or leave null",
+        "observed_at": "2026-01-01T00:00:00Z"
+      },
+      "S1": {
+        "feature_id": "S1",
+        "value": null,
+        "direction": "context",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": "TEMPLATE \u2014 set value at detection or leave null",
+        "observed_at": "2026-01-01T00:00:00Z"
+      }
+    }
+  }
+}

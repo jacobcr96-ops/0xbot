@@ -1,0 +1,127 @@
+{
+  "schema_version": "xintel.candidate.v1",
+  "candidate_id": "e8c287b3-9215-4df5-a223-be4c541aa2c5",
+  "first_seen_at": "2026-09-20T19:30:26Z",
+  "contract_address": "0x9557dd9e241bc9636732623b672b4090af519396",
+  "chain": "base",
+  "ticker": "CRYNUX",
+  "mc_usd_at_first_sight": null,
+  "price_usd_at_first_sight": null,
+  "decision": "reject",
+  "reject_reason": "Infra narrative not meme-viral; pack deprioritized vs STAMP; narrative 6/10 but weak virality",
+  "evidence": [
+    {
+      "channel": "x_social",
+      "summary": "@Lovrincrypto (133k) under-$1m push",
+      "observed_at": "2026-09-20T19:30:26Z"
+    },
+    {
+      "channel": "narrative",
+      "summary": "6/10 infra story, weak meme spread; Market Check was yes then pack skipped",
+      "observed_at": "2026-09-20T19:30:26Z"
+    }
+  ],
+  "source_accounts": [
+    "Lovrincrypto"
+  ],
+  "experiment_id": "xintel_v0",
+  "outcomes": {
+    "ret_5m": null,
+    "ret_15m": null,
+    "ret_1h": null,
+    "ret_6h": null,
+    "ret_24h": null,
+    "max_runup": null,
+    "max_drawdown": null
+  },
+  "feature_scores": {
+    "schema_version": "xintel.feature_scores.v1",
+    "experiment_id": "xintel_v0",
+    "batch": "BATCH_01",
+    "provisional": true,
+    "scored_at": "2026-09-20T19:35:00Z",
+    "scored_by": "Outcome Desk stub \u2014 insufficient room evidence",
+    "scores": {
+      "D1": {
+        "feature_id": "D1",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Flow",
+        "notes": null,
+        "observed_at": null
+      },
+      "S2": {
+        "feature_id": "S2",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": null,
+        "observed_at": null
+      },
+      "S3": {
+        "feature_id": "S3",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "X Scout",
+        "notes": null,
+        "observed_at": null
+      },
+      "S4": {
+        "feature_id": "S4",
+        "value": null,
+        "direction": "context",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Market",
+        "notes": null,
+        "observed_at": null
+      },
+      "D2": {
+        "feature_id": "D2",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": null,
+        "observed_at": null
+      },
+      "S5": {
+        "feature_id": "S5",
+        "value": null,
+        "direction": "bullish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Flow",
+        "notes": null,
+        "observed_at": null
+      },
+      "D4": {
+        "feature_id": "D4",
+        "value": null,
+        "direction": "bearish",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Market",
+        "notes": null,
+        "observed_at": null
+      },
+      "S1": {
+        "feature_id": "S1",
+        "value": null,
+        "direction": "context",
+        "provisional": true,
+        "batch": "BATCH_01",
+        "desk": "Narrative",
+        "notes": null,
+        "observed_at": null
+      }
+    }
+  }
+}

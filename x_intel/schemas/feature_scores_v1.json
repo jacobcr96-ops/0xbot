@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "XIntelFeatureScoresV1",
+  "description": "Prospective feature scores at detection time (T). Observable-at-T only — no hindsight. Provisional BATCH_01 shortlist for experiment_id=xintel_v0. Score on EVERY new candidate; null when unknown.",
+  "type": "object",
+  "required": ["schema_version", "experiment_id", "batch", "provisional", "scores"],
+  "properties": {
+    "schema_version": { "const": "xintel.feature_scores.v1" },
+    "experiment_id": { "type": "string", "description": "Must match candidate experiment_id (default xintel_v0)." },
+    "batch": { "const": "BATCH_01" },
+    "provisional": { "const": true },
+    "scored_at": { "type": ["string", "null"], "format": "date-time", "description": "When scores were last written (ISO-8601)." },
+    "scored_by": { "type": ["string", "null"], "description": "Desk or agent that last wrote scores (e.g. Flow, Narrative, Outcome Desk aggregate)." },
+    "scores": {
+      "type": "object",
+      "description": "Keyed by feature_id. Every BATCH_01 shortlist id SHOULD appear; missing keys treated as unknown.",
+      "additionalProperties": false,
+      "properties": {
+        "D1": { "$ref": "#/$defs/featureScoreEntry" },
+        "S2": { "$ref": "#/$defs/featureScoreEntry" },
+        "S3": { "$ref": "#/$defs/featureScoreEntry" },
+        "S4": { "$ref": "#/$defs/featureScoreEntry" },
+        "D2": { "$ref": "#/$defs/featureScoreEntry" },
+        "S5": { "$ref": "#/$defs/featureScoreEntry" },
+        "D4": { "$ref": "#/$defs/featureScoreEntry" },
+        "S1": { "$ref": "#/$defs/featureScoreEntry" }
+      }
+    }
+  },
+  "$defs": {
+    "featureScoreEntry": {
+      "type": "object",
+      "required": ["feature_id", "value", "direction", "provisional", "batch"],
+      "properties": {
+        "feature_id": { "type": "string" },
+        "value": {
+          "description": "Typed score or null if unknown at T. Type depends on feature_id (see feature_catalog).",
+          "type": ["boolean", "string", "number", "null"]
+        },
+        "direction": { "enum": ["bullish", "bearish", "context"] },
+        "provisional": { "const": true },
+        "batch": { "const": "BATCH_01" },
+        "desk": {
+          "type": ["string", "null"],
+          "description": "Desk that usually fills this score: Flow | Narrative | Market | X Scout."
+        },
+        "notes": { "type": ["string", "null"], "description": "Short observable-at-T rationale; no hindsight." },
+        "observed_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "feature_catalog": {
+      "description": "Authoritative scoring rubrics for BATCH_01 provisional OOS shortlist. Not a runtime required field — documentation for desks.",
+      "D1": {
+        "feature_id": "D1",
+        "name": "bundled_concentration",
+        "direction": "bearish",
+        "value_type": "boolean",
+        "allowed_values": [true, false, null],
+        "desk": "Flow",
+        "scoring": "true = sybil-bundled launch / funnel concentration observable at T (cluster tooling: many wallets buy at launch then re-aggregate). false = tooling checked and no material funnel concentration. null = tooling unavailable or inconclusive.",
+        "notes_from_signals": "SHAR Bubblemaps 60%/100+ wallets on death side. Requires cluster tooling at T0; invisible on naive holder UI. med–high confidence when tooling available."
+      },
+      "S2": {
+        "feature_id": "S2",
+        "name": "first_mint_in_window",
+        "direction": "bullish",
+        "value_type": "enum",
+        "allowed_values": ["first", "early", "late_challenger", "unknown", null],
+        "desk": "Narrative",
+        "scoring": "Relative to narrative family at T: first = credible first mint in news/meta window; early = among first wave; late_challenger = week+ late or explicit post-leader timing; unknown/null if family window unclear live.",
+        "notes_from_signals": "PNUT/MOODENG/GOAT runners; JUSTICE/GPT2/PESTO/SHAR/DORAE late or copycat. First is hard to know live amid CA spam. med confidence."
+      },
+      "S3": {
+        "feature_id": "S3",
+        "name": "lore_native_amplifier",
+        "direction": "bullish",
+        "value_type": "boolean",
+        "allowed_values": [true, false, null],
+        "desk": "X Scout",
+        "scoring": "true = amplification from a non-generic attention node observable at T (lore-native agent endorsement, news/political node, multi-outlet animal virality) — not only paid KOL blasts. false = only generic/paid blasts observed. null = unknown.",
+        "notes_from_signals": "GOAT ToT; PNUT Vance/Musk; MOODENG global media. SHAR paid multi-KOL opposite. Amplifiers can exit liquidity; presence ≠ safety. med confidence."
+      },
+      "S4": {
+        "feature_id": "S4",
+        "name": "time_alive_before_parabola",
+        "direction": "context",
+        "value_type": "ordinal",
+        "allowed_values": ["minutes", "hours", "days", "weeks_plus", null],
+        "desk": "Market",
+        "scoring": "Age/survival band observable at first_seen (pair age / time since mint). Not a prediction of future grind — only elapsed life at T. minutes|hours = short-lived so far; days|weeks_plus = multi-day survival before any major expansion observed at T.",
+        "notes_from_signals": "Runners often multi-day/week before parabolic print; deaths often minutes/hours. Slow grind can still rug; speed alone ≠ quality. med confidence."
+      },
+      "D2": {
+        "feature_id": "D2",
+        "name": "post_leader_copycat",
+        "direction": "bearish",
+        "value_type": "boolean",
+        "allowed_values": [true, false, null],
+        "desk": "Narrative",
+        "scoring": "true = explicit copycat timing / cohort membership after a category leader already printed (same narrative family, late challenger). false = not a post-leader copycat (original lane or unrelated hitch). null = unclear.",
+        "notes_from_signals": "GPT2/PESTO/JUSTICE/DORAE death hits. Some copycats still run (not in BATCH_01). med confidence."
+      },
+      "S5": {
+        "feature_id": "S5",
+        "name": "lp_mint_cto_custody",
+        "direction": "bullish",
+        "value_type": "boolean",
+        "allowed_values": [true, false, null],
+        "desk": "Flow",
+        "scoring": "true = at least one verifiable structural custody claim visible at T: LP burn, mint revoke, full-float narrative with on-chain support, or successful CTO removing hostile deployer. false = checked and none present. null = not verified. Weak alone — do not treat as a switch.",
+        "notes_from_signals": "WIF/POPCAT runners; many burned-LP tokens still die on attention death. Need on-chain verify live. low–med; weak alone."
+      },
+      "D4": {
+        "feature_id": "D4",
+        "name": "early_ca_migration",
+        "direction": "bearish",
+        "value_type": "boolean",
+        "allowed_values": [true, false, null],
+        "desk": "Market",
+        "scoring": "true = contract migration / new CA within days of launch observable at T (or announced migration in flight). false = continuity of main CA confirmed at T. null = unknown.",
+        "notes_from_signals": "JUSTICE → JFP ~10 days on death side. Migrations sometimes honest; coincided with collapse narrative in batch. med confidence."
+      },
+      "S1": {
+        "feature_id": "S1",
+        "name": "cultural_prior",
+        "direction": "context",
+        "value_type": "boolean",
+        "allowed_values": [true, false, null],
+        "desk": "Narrative",
+        "scoring": "true = pre-existing cultural object (years-old meme, breaking-news animal, agent lore) existed before mint and is tightly matched to ticker — use as prior not as switch. false = new brand / generic / no prior fit. null = unknown. Selection-biased in Historian batch.",
+        "notes_from_signals": "5/5 runners had priors; many prior-backed tokens still die. Survivorship in case selection. med; biased — prior not switch."
+      }
+    }
+  }
+}

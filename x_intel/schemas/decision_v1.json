@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "XIntelDecisionV1",
+  "description": "Machine-readable handoff from Grok intelligence layer to 0xbot execution. 0xbot validates balances, places orders, and enforces hard safety. Intelligence never executes.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "decision_id",
+    "action",
+    "issued_at",
+    "expires_at",
+    "contract_address",
+    "chain",
+    "confidence",
+    "sizing_intent",
+    "evidence",
+    "do_not_execute_until_armed"
+  ],
+  "properties": {
+    "schema_version": { "const": "xintel.decision.v1" },
+    "decision_id": { "type": "string", "format": "uuid" },
+    "action": { "enum": ["BUY", "ADD", "REDUCE", "EXIT", "HOLD"] },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time", "description": "Hard staleness cutoff. 0xbot MUST ignore if now > expires_at." },
+    "contract_address": { "type": "string" },
+    "chain": {
+      "enum": ["solana", "base", "bsc", "ethereum", "arbitrum", "avalanche", "polygon", "ton", "tron", "sui", "other"]
+    },
+    "ticker": { "type": ["string", "null"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "thesis": { "type": "string" },
+    "sizing_intent": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["percent_equity", "notional_usd", "units", "flat_exit", "hold"] },
+        "value": { "type": ["number", "null"] },
+        "max_slippage_bps": { "type": ["integer", "null"] },
+        "urgency": { "enum": ["low", "normal", "high"] }
+      }
+    },
+    "market_snapshot": {
+      "type": "object",
+      "properties": {
+        "mc_usd": { "type": ["number", "null"] },
+        "price_usd": { "type": ["number", "null"] },
+        "liquidity_usd": { "type": ["number", "null"] },
+        "volume_1h_usd": { "type": ["number", "null"] },
+        "pair_age_minutes": { "type": ["number", "null"] },
+        "as_of": { "type": "string", "format": "date-time" }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["channel", "summary", "observed_at"],
+        "properties": {
+          "channel": {
+            "enum": ["x_social", "onchain_flow", "narrative", "launch_metrics", "wallet_behavior", "cross_source", "historical_analog"]
+          },
+          "summary": { "type": "string" },
+          "observed_at": { "type": "string", "format": "date-time" },
+          "refs": { "type": "array", "items": { "type": "string" } },
+          "weight": { "type": "number" }
+        }
+      }
+    },
+    "risk_flags": { "type": "array", "items": { "type": "string" } },
+    "experiment_id": { "type": "string", "description": "Versioned strategy/experiment boundary for expectancy tracking." },
+    "candidate_id": { "type": "string" },
+    "do_not_execute_until_armed": { "type": "boolean", "const": true }
+  }
+}

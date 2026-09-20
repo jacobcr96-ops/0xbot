@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "x-intel"
+version = "0.1.0"
+description = "Intelligence / decision layer for 0xbot (disarmed — no live trading)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "jacobcr96-ops" }]
+dependencies = [
+  "pydantic>=2.6",
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+
+[project.scripts]
+x-intel-demo = "scripts.demo:main"
+x-intel-mcp = "x_intel.mcp_server.server:main"
+
+[tool.setuptools.packages.find]
+include = ["x_intel*"]
+
+[tool.setuptools.package-data]
+x_intel = ["schemas/*.json", "schemas/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
