@@ -7,8 +7,9 @@ Dual-role repo:
 | **x_intel** (this PR) | Active, **disarmed** | Detect candidates, score features, emit decision *intents* |
 | **Execution** (future) | Not armed | Wallets, orders, balances, hard safety — Claude / 0xbot |
 
-**No live trading until armed.** Every decision carries `do_not_execute_until_armed: true`.  
-Default experiment: **`xintel_v0`**.
+**No live trading until `XINTEL_ARMED=true`.** Disarmed decisions still emit for paper with `do_not_execute_until_armed: true`. Default experiment: **`xintel_v0`**.
+
+Disk queue: `data/decisions/` (atomic). BUY/ADD TTL: **5 minutes**. See [docs/0xbot_integration.md](docs/0xbot_integration.md).
 
 ## Quick start
 
@@ -18,6 +19,8 @@ make test             # unit tests
 make demo             # load fixtures, print findings paths + curl examples
 make api              # uvicorn x_intel.api.main:app on :8080
 make mcp              # list MCP handoff tools
+make emit-buy CANDIDATE=<id>   # pursue→BUY → data/decisions/
+make ingest-reports   # load execution_report.v1 → outcomes
 ```
 
 Or manually:
@@ -60,9 +63,11 @@ x_intel/
   scoring/      # feature freeze + inspectable weights (anti-hindsight)
   research/     # historical cases / hypotheses loaders
   ingest/       # X + market interfaces (fixture/replay mode)
+  emit/         # pursue→BUY emitter (disk queue)
+  config.py     # XINTEL_DATA_DIR, XINTEL_ARMED
 docs/           # ARCHITECTURE, integration, outcome protocol, feature registry
 reports/        # BATCH_01 case files, signal hypotheses, leaderboard
-data/           # candidates, outcomes, decision fixtures
+data/           # candidates, outcomes, decisions/ queue, execution_reports/
 ```
 
 ## Safety rules

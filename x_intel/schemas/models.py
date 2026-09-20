@@ -1,14 +1,15 @@
-"""Pydantic models matching candidate_v1 / decision_v1 / outcome_fill_v1 / feature_scores_v1."""
+"""Pydantic models matching candidate_v1 / decision_v1 / outcome_fill_v1 /
+feature_scores_v1 / execution_report_v1."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SCHEMA_DIR = Path(__file__).resolve().parent
 
@@ -36,6 +37,9 @@ EvidenceChannel = Literal[
     "historical_analog",
 ]
 
+# BUY/ADD default TTL (seconds). Bridge RTT is 5–15s; 5 minutes is the handoff contract.
+BUY_ADD_TTL_SECONDS = 300
+
 
 class DecisionAction(str, Enum):
     BUY = "BUY"
@@ -49,6 +53,19 @@ class CandidateDecision(str, Enum):
     pursue = "pursue"
     watch = "watch"
     reject = "reject"
+
+
+class RejectReason(str, Enum):
+    """Gateway reject taxonomy for execution_report.v1."""
+
+    stale = "stale"
+    no_cash = "no_cash"
+    chain_unsupported = "chain_unsupported"
+    ca_unresolved = "ca_unresolved"
+    disable_buying = "disable_buying"
+    duplicate = "duplicate"
+    below_min_size = "below_min_size"
+    other = "other"
 
 
 class EvidenceItem(BaseModel):
@@ -92,6 +109,8 @@ class Outcomes(BaseModel):
 
 
 class FeatureScoreEntry(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     feature_id: str
     value: Optional[Union[bool, str, float, int]] = None
     direction: Literal["bullish", "bearish", "context"]
@@ -103,6 +122,8 @@ class FeatureScoreEntry(BaseModel):
 
 
 class FeatureScoresV1(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     schema_version: Literal["xintel.feature_scores.v1"] = "xintel.feature_scores.v1"
     experiment_id: str = "xintel_v0"
     batch: Literal["BATCH_01"] = "BATCH_01"
@@ -110,9 +131,12 @@ class FeatureScoresV1(BaseModel):
     scored_at: Optional[datetime] = None
     scored_by: Optional[str] = None
     scores: dict[str, FeatureScoreEntry] = Field(default_factory=dict)
+    window_type: Optional[str] = None
 
 
 class CandidateV1(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     schema_version: Literal["xintel.candidate.v1"] = "xintel.candidate.v1"
     candidate_id: UUID
     first_seen_at: datetime
@@ -128,6 +152,7 @@ class CandidateV1(BaseModel):
     experiment_id: str = "xintel_v0"
     outcomes: Optional[Outcomes] = None
     feature_scores: Optional[FeatureScoresV1] = None
+    window_type: Optional[str] = None
 
 
 class DecisionV1(BaseModel):
@@ -149,20 +174,16 @@ class DecisionV1(BaseModel):
     risk_flags: list[str] = Field(default_factory=list)
     experiment_id: str = "xintel_v0"
     candidate_id: Optional[str] = None
-    do_not_execute_until_armed: Literal[True] = True
-
-    @field_validator("do_not_execute_until_armed")
-    @classmethod
-    def _must_be_armed_false(cls, v: bool) -> bool:
-        if v is not True:
-            raise ValueError("do_not_execute_until_armed must be true (pipeline disarmed)")
-        return True
+    # When XINTEL_ARMED=false (default), MUST be true. When armed, false on emit.
+    do_not_execute_until_armed: bool = True
 
     @model_validator(mode="after")
     def _expires_after_issued(self) -> "DecisionV1":
         if self.expires_at <= self.issued_at:
             raise ValueError("expires_at must be after issued_at")
         return self
+
+
 
 
 class OutcomeFillV1(BaseModel):
@@ -178,6 +199,78 @@ class OutcomeFillV1(BaseModel):
     horizon_filled_at: Optional[dict[str, Optional[datetime]]] = None
     lp_rug_detected_at: Optional[datetime] = None
     notes: Optional[str] = None
+
+
+class FillRecord(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    requested_usd: Optional[float] = None
+    filled_usd: Optional[float] = None
+    price: Optional[float] = None
+    mc_at_fill: Optional[float] = None
+    slippage_bps: Optional[float] = None
+    latency_ms: Optional[float] = None
+    filled_at: Optional[datetime] = None
+    tx_ref: Optional[str] = None
+
+
+class PositionSnapshot(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    contract_address: Optional[str] = None
+    chain: Optional[str] = None
+    units: Optional[float] = None
+    notional_usd: Optional[float] = None
+    avg_entry_price: Optional[float] = None
+    unrealized_pnl_usd: Optional[float] = None
+    as_of: Optional[datetime] = None
+
+
+class ClosedRound(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    multiple: Optional[float] = None
+    hold_time_s: Optional[float] = None
+    mfe: Optional[float] = None
+    mae: Optional[float] = None
+    realized_pnl_usd: Optional[float] = None
+    closed_at: Optional[datetime] = None
+
+
+class ExecutionReportV1(BaseModel):
+    """Return path from 0xbot / Tampermonkey gateway → x_intel."""
+
+    schema_version: Literal["xintel.execution_report.v1"] = "xintel.execution_report.v1"
+    report_id: UUID
+    decision_id: UUID
+    reported_at: datetime
+    status: Literal["filled", "partial", "rejected", "skipped", "error"]
+    reject_reason: Optional[RejectReason] = None
+    reject_detail: Optional[str] = None
+    fills: list[FillRecord] = Field(default_factory=list)
+    positions: list[PositionSnapshot] = Field(default_factory=list)
+    equity_usd: Optional[float] = None
+    closed_round: Optional[ClosedRound] = None
+    experiment_id: str = "xintel_v0"
+    candidate_id: Optional[str] = None
+    notes: Optional[str] = None
+
+
+def default_expires_at(
+    action: DecisionAction | str,
+    issued_at: datetime,
+    *,
+    ttl_seconds: Optional[int] = None,
+) -> datetime:
+    """Default expiry: BUY/ADD → issued_at + 5 minutes; others → +15 minutes."""
+    act = action.value if isinstance(action, DecisionAction) else str(action)
+    if ttl_seconds is not None:
+        delta = timedelta(seconds=ttl_seconds)
+    elif act in ("BUY", "ADD"):
+        delta = timedelta(seconds=BUY_ADD_TTL_SECONDS)
+    else:
+        delta = timedelta(minutes=15)
+    return issued_at + delta
 
 
 def is_decision_stale(decision: DecisionV1, now: Optional[datetime] = None) -> bool:

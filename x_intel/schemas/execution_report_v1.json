@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "XIntelExecutionReportV1",
+  "description": "Return path from 0xbot / Tampermonkey gateway. Reject stream is primary feedback for confidence weights.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "report_id",
+    "decision_id",
+    "reported_at",
+    "status"
+  ],
+  "properties": {
+    "schema_version": { "const": "xintel.execution_report.v1" },
+    "report_id": { "type": "string", "format": "uuid" },
+    "decision_id": { "type": "string", "format": "uuid" },
+    "reported_at": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["filled", "partial", "rejected", "skipped", "error"] },
+    "reject_reason": {
+      "type": ["string", "null"],
+      "enum": [
+        "stale",
+        "no_cash",
+        "chain_unsupported",
+        "ca_unresolved",
+        "disable_buying",
+        "duplicate",
+        "below_min_size",
+        "other",
+        null
+      ]
+    },
+    "reject_detail": { "type": ["string", "null"] },
+    "fills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "requested_usd": { "type": ["number", "null"] },
+          "filled_usd": { "type": ["number", "null"] },
+          "price": { "type": ["number", "null"] },
+          "mc_at_fill": { "type": ["number", "null"] },
+          "slippage_bps": { "type": ["number", "null"] },
+          "latency_ms": {
+            "type": ["number", "null"],
+            "description": "Milliseconds from decision issued_at to fill"
+          },
+          "filled_at": { "type": "string", "format": "date-time" },
+          "tx_ref": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "positions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "contract_address": { "type": ["string", "null"] },
+          "chain": { "type": ["string", "null"] },
+          "units": { "type": ["number", "null"] },
+          "notional_usd": { "type": ["number", "null"] },
+          "avg_entry_price": { "type": ["number", "null"] },
+          "unrealized_pnl_usd": { "type": ["number", "null"] },
+          "as_of": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "equity_usd": { "type": ["number", "null"] },
+    "closed_round": {
+      "type": ["object", "null"],
+      "properties": {
+        "multiple": { "type": ["number", "null"] },
+        "hold_time_s": { "type": ["number", "null"] },
+        "mfe": { "type": ["number", "null"] },
+        "mae": { "type": ["number", "null"] },
+        "realized_pnl_usd": { "type": ["number", "null"] },
+        "closed_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "experiment_id": { "type": "string" },
+    "candidate_id": { "type": ["string", "null"] },
+    "notes": { "type": ["string", "null"] }
+  }
+}

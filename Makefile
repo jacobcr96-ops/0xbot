@@ -1,4 +1,4 @@
-.PHONY: install test demo api mcp lint
+.PHONY: install test demo api mcp lint emit-buy ingest-reports ledger-status
 
 VENV ?= .venv
 PY := $(VENV)/bin/python
@@ -23,3 +23,12 @@ mcp:
 
 ledger-status:
 	$(PY) scripts/outcome_ledger.py status
+
+# Emit BUY from pursue candidate → data/decisions/ disk queue
+# Usage: make emit-buy CANDIDATE=<uuid-or-path>
+emit-buy:
+	@test -n "$(CANDIDATE)" || (echo "Usage: make emit-buy CANDIDATE=<uuid-or-path>"; exit 1)
+	$(PY) -m x_intel.emit.pursue_buy --candidate "$(CANDIDATE)"
+
+ingest-reports:
+	$(PY) -m x_intel.ledger.execution_reports

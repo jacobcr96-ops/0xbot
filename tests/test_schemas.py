@@ -13,6 +13,7 @@ from x_intel.schemas.models import (
     DecisionV1,
     EvidenceItem,
     SizingIntent,
+    default_expires_at,
     is_decision_stale,
 )
 
@@ -27,7 +28,7 @@ def _evidence():
     ]
 
 
-def test_decision_requires_armed_true():
+def test_decision_default_armed_true():
     now = datetime.now(timezone.utc)
     d = DecisionV1(
         decision_id=uuid4(),
@@ -44,21 +45,21 @@ def test_decision_requires_armed_true():
     assert d.do_not_execute_until_armed is True
 
 
-def test_decision_rejects_armed_false():
+def test_decision_allows_do_not_execute_false_when_armed():
     now = datetime.now(timezone.utc)
-    with pytest.raises(ValidationError):
-        DecisionV1(
-            decision_id=uuid4(),
-            action=DecisionAction.BUY,
-            issued_at=now,
-            expires_at=now + timedelta(minutes=3),
-            contract_address="So11111111111111111111111111111111111111112",
-            chain="solana",
-            confidence=0.9,
-            sizing_intent=SizingIntent(mode="percent_equity", value=1.0),
-            evidence=_evidence(),
-            do_not_execute_until_armed=False,  # type: ignore[arg-type]
-        )
+    d = DecisionV1(
+        decision_id=uuid4(),
+        action=DecisionAction.BUY,
+        issued_at=now,
+        expires_at=default_expires_at(DecisionAction.BUY, now),
+        contract_address="So11111111111111111111111111111111111111112",
+        chain="solana",
+        confidence=0.9,
+        sizing_intent=SizingIntent(mode="percent_equity", value=1.0),
+        evidence=_evidence(),
+        do_not_execute_until_armed=False,
+    )
+    assert d.do_not_execute_until_armed is False
 
 
 def test_decision_actions_enum():
@@ -68,7 +69,7 @@ def test_decision_actions_enum():
             decision_id=uuid4(),
             action=action,
             issued_at=now,
-            expires_at=now + timedelta(minutes=2),
+            expires_at=now + timedelta(minutes=5),
             contract_address="CA",
             chain="solana",
             confidence=0.1,
