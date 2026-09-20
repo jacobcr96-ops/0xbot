@@ -12,6 +12,28 @@ from pathlib import Path
 from typing import Optional
 
 
+def _load_repo_env() -> None:
+    """Load simple KEY=VAL lines from repo .env if present (no python-dotenv required)."""
+    try:
+        env_path = Path(__file__).resolve().parents[1] / ".env"
+        if not env_path.is_file():
+            return
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            k, v = k.strip(), v.strip().strip('"').strip("'")
+            if k and k not in os.environ:
+                os.environ[k] = v
+    except OSError:
+        pass
+
+
+_load_repo_env()
+
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":

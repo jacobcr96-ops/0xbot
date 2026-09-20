@@ -39,3 +39,6 @@ discovery-once:
 
 discovery-validate:
 	$(PY) -m x_intel.discovery.validate
+
+publish-decisions:
+	./scripts/publish_decisions_git.sh

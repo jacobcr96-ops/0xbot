@@ -29,3 +29,4 @@ data/flow_inbox/*.json
 data/agent_inbox/**/*.json
 !data/agent_inbox/.gitkeep
 data/discovery_bus.json
+.env
