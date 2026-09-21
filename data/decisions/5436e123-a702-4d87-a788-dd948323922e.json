@@ -1,0 +1,68 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "5436e123-a702-4d87-a788-dd948323922e",
+  "action": "BUY",
+  "issued_at": "2026-09-21T02:25:10.836Z",
+  "expires_at": "2026-09-21T02:45:10.836Z",
+  "contract_address": "zecYuRMvzRiLktRNQywZbkD3M64rF8Qth8x6pYVyQoV",
+  "chain": "solana",
+  "ticker": "Stablezats",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY Stablezats \u2014 organic_x CA mentions (cooldevisback builder narrative + scanners); live MC~$78421 pump.fun graduated; early unique not clone-farm",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 0.75,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 78421.02690398265,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-21T02:24:54.870071Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Stablezats symbol=Stablezats mc_source=pump.fun mc_usd=72752.83049170848",
+      "observed_at": "2026-09-21T02:20:51.193655Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-21T02:20:51.193655Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-21T02:19:01.135738Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "x_social",
+      "summary": "organic_x=True matching_n=8; cooldevisback CA posts (builder) + SolPlayScanner/AutorunAlert noise; not pump.twitter-only",
+      "observed_at": "2026-09-21T02:25:10.836058+00:00",
+      "refs": [
+        "https://x.com/cooldevisback/status/2101855364413108639",
+        "https://x.com/cooldevisback/status/2101856318789202384"
+      ],
+      "weight": 0.7
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x",
+    "jacob_ping_candidate"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "fe9292a7-b9e0-46aa-b2f4-ead7705c2d78",
+  "do_not_execute_until_armed": false
+}
