@@ -1,0 +1,65 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "52a1b6b2-94ec-4562-a963-06700c26d068",
+  "action": "BUY",
+  "issued_at": "2026-09-21T00:10:47.792295Z",
+  "expires_at": "2026-09-21T00:30:47.792295Z",
+  "contract_address": "HRXEKvAuz3Y1uocPtwRHezC5UAtNuD9X9kfyiSPuvMYb",
+  "chain": "solana",
+  "ticker": "ZEROCOIN",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY ZEROCOIN organic_x=True (8 CA-scoped X posts, multi-author) first_sight_mc~$45k live_mc~$128k pump.fun; zcash-theme early runner under $500k",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 127953.85207053655,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-21T00:12:06.411767+00:00",
+    "source": "pump.fun",
+    "fetched_at": "2026-09-21T00:12:06.411767+00:00",
+    "mc_usd_at_first_sight": 45040.579031228364
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=ZEROCOIN symbol=ZEROCOIN mc_source=pump.fun mc_usd=45040.579031228364",
+      "observed_at": "2026-09-21T00:10:47.507368Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-21T00:10:47.507368Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-21T00:09:22.813322Z",
+      "refs": [],
+      "weight": 0.6
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_pass",
+    "jacob_ping_candidate",
+    "live_mc_refreshed"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "2027e69b-d265-44dd-b5da-447660d838ec",
+  "do_not_execute_until_armed": false,
+  "organic_x": true,
+  "jacob_ping": true,
+  "x_organic_path": "data/x_organic/HRXEKvAuz3Y1uocPtwRHezC5UAtNuD9X9kfyiSPuvMYb.json"
+}
