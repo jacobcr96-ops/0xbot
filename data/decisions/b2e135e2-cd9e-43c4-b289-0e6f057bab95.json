@@ -1,0 +1,58 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "b2e135e2-cd9e-43c4-b289-0e6f057bab95",
+  "action": "BUY",
+  "issued_at": "2026-09-21T02:49:30.678589Z",
+  "expires_at": "2026-09-21T03:09:30.678589Z",
+  "contract_address": "35eZEvJ6d9Y5e1UoH5s3fR3vZ8T1SCPDPRThoXpZpump",
+  "chain": "solana",
+  "ticker": "SFI",
+  "confidence": 0.55,
+  "thesis": "Early SFI/SocialFi first-sight ~$25k on pump.fun bonding curve; organic_x CA mentions from @Socialfidotfun + dexpai; unique ticker; profile twitter + website socialfi.fun; not clone_storm.",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 25160.39,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-21T02:49:30.678589Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=SocialFi symbol=SFI mc_source=pump.fun mc_usd=24463.60898907372",
+      "observed_at": "2026-09-21T02:46:11.428708Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-21T02:46:11.428708Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-21T02:45:31.755619Z",
+      "refs": [],
+      "weight": 0.6
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared",
+    "early_curve"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "0d145621-8e7a-4fe6-bb80-87c046987275",
+  "do_not_execute_until_armed": false
+}
