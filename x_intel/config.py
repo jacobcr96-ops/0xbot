@@ -99,3 +99,96 @@ def organic_x_required_for_ping() -> bool:
     """Jacob ping / xintel publish prefer organic_x when enabled."""
     return _env_bool("XINTEL_ORGANIC_X_REQUIRED_FOR_PING", default=False)
 
+
+
+# ---------------------------------------------------------------------------
+# Multi-chain discovery / quotes
+# ---------------------------------------------------------------------------
+
+DEFAULT_DISCOVERY_CHAINS: tuple[str, ...] = ("solana", "base", "ethereum", "bsc")
+EVM_CHAINS = frozenset(
+    {"ethereum", "base", "bsc", "arbitrum", "polygon", "avalanche", "optimism"}
+)
+
+# GoPlus token_security chain_id
+GOPLUS_CHAIN_IDS: dict[str, str] = {
+    "ethereum": "1",
+    "eth": "1",
+    "bsc": "56",
+    "base": "8453",
+    "arbitrum": "42161",
+    "polygon": "137",
+    "avalanche": "43114",
+    "optimism": "10",
+}
+
+# DexScreener chainId strings
+DEX_CHAIN_IDS: dict[str, str] = {
+    "solana": "solana",
+    "ethereum": "ethereum",
+    "eth": "ethereum",
+    "base": "base",
+    "bsc": "bsc",
+    "arbitrum": "arbitrum",
+    "polygon": "polygon",
+    "avalanche": "avalanche",
+    "optimism": "optimism",
+}
+
+
+def configured_chains() -> frozenset[str]:
+    """Chains enabled for Dex / multi-chain discovery.
+
+    Env ``XINTEL_CHAINS=solana,bsc,base`` (comma-separated). Default: solana+base+ethereum+bsc.
+    """
+    raw = os.environ.get("XINTEL_CHAINS", "").strip()
+    if not raw:
+        return frozenset(DEFAULT_DISCOVERY_CHAINS)
+    out: set[str] = set()
+    aliases = {
+        "sol": "solana",
+        "eth": "ethereum",
+        "ether": "ethereum",
+        "bnb": "bsc",
+        "binance": "bsc",
+    }
+    for part in raw.split(","):
+        c = part.strip().lower()
+        if not c:
+            continue
+        out.add(aliases.get(c, c))
+    return frozenset(out) if out else frozenset(DEFAULT_DISCOVERY_CHAINS)
+
+
+def is_evm_chain(chain: Optional[str]) -> bool:
+    return (chain or "").strip().lower() in EVM_CHAINS
+
+
+def goplus_chain_id(chain: str) -> Optional[str]:
+    return GOPLUS_CHAIN_IDS.get((chain or "").strip().lower())
+
+
+def dex_chain_id(chain: str) -> Optional[str]:
+    return DEX_CHAIN_IDS.get((chain or "").strip().lower())
+
+
+def evm_dex_min_interval_sec() -> float:
+    """Min seconds between EVM DexScreener discovery polls (Solana pump stays primary)."""
+    raw = os.environ.get("XINTEL_DEX_EVM_INTERVAL_SEC", "").strip()
+    if not raw:
+        return 300.0  # 5 minutes
+    try:
+        return max(60.0, float(raw))
+    except ValueError:
+        return 300.0
+
+
+def evm_dex_cooldown_sec() -> float:
+    """Cooldown after Dex 429 for EVM polls (longer than Solana path)."""
+    raw = os.environ.get("XINTEL_DEX_EVM_COOLDOWN_SEC", "").strip()
+    if not raw:
+        return 45 * 60.0  # 45 min
+    try:
+        return max(300.0, float(raw))
+    except ValueError:
+        return 45 * 60.0

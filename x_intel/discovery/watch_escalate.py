@@ -292,17 +292,29 @@ def fetch_mc_usd(
     timeout_s: float = 8.0,
     allow_dex: Optional[bool] = None,
 ) -> Optional[float]:
-    """Fetch USD market cap. Prefer pump.fun; Dex when not skipped."""
+    """Fetch USD market cap.
+
+    Solana: pump.fun primary; Dex when not XINTEL_SKIP_DEX.
+    EVM (bsc/base/ethereum/… or 0x CA): Dex always (no pump); ignore SKIP_DEX.
+    Never invents MC — returns None when unknown.
+    """
     ca = (ca or "").strip()
     if not ca:
         return None
-    use_dex = (not skip_dex()) if allow_dex is None else allow_dex
+    chain_n = (chain or "").strip().lower()
+    is_evm = chain_n in {"base", "ethereum", "bsc", "arbitrum", "polygon", "avalanche", "optimism"} or ca.lower().startswith("0x")
 
-    mc = _fetch_pumpfun_mc(ca, timeout_s=timeout_s)
-    if mc is not None:
-        return mc
-    if use_dex and (chain or "").lower() in {"", "solana", "base", "ethereum", "bsc", "arbitrum"}:
-        return _fetch_dex_mc(ca, timeout_s=timeout_s)
+    if allow_dex is None:
+        use_dex = True if is_evm else (not skip_dex())
+    else:
+        use_dex = allow_dex
+
+    if not is_evm:
+        mc = _fetch_pumpfun_mc(ca, timeout_s=timeout_s)
+        if mc is not None:
+            return mc
+    if use_dex:
+        return _fetch_dex_mc(ca, chain=chain_n if is_evm else None, timeout_s=timeout_s)
     return None
 
 
@@ -327,7 +339,12 @@ def _fetch_pumpfun_mc(ca: str, *, timeout_s: float) -> Optional[float]:
     return None
 
 
-def _fetch_dex_mc(ca: str, *, timeout_s: float) -> Optional[float]:
+def _fetch_dex_mc(
+    ca: str,
+    *,
+    chain: Optional[str] = None,
+    timeout_s: float,
+) -> Optional[float]:
     url = DEX_TOKEN_URL.format(ca=ca)
     try:
         req = Request(url, headers={"User-Agent": "x-intel-discovery/0.1"})
@@ -337,10 +354,13 @@ def _fetch_dex_mc(ca: str, *, timeout_s: float) -> Optional[float]:
         log.debug("dex mc fetch failed ca=%s…: %s", ca[:12], e)
         return None
     pairs = payload.get("pairs") or []
+    want = (chain or "").lower() if chain and chain not in {"", "solana"} else None
     best: Optional[float] = None
     best_liq = -1.0
     for p in pairs:
         if not isinstance(p, dict):
+            continue
+        if want and str(p.get("chainId") or "").lower() != want:
             continue
         liq = (p.get("liquidity") or {}).get("usd")
         try:
@@ -357,6 +377,7 @@ def _fetch_dex_mc(ca: str, *, timeout_s: float) -> Optional[float]:
         if liq_f >= best_liq:
             best_liq = liq_f
             best = mc_f
+    # If chain filter emptied results, do not invent — return None
     return best
 
 

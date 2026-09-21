@@ -93,7 +93,8 @@ If MC dips to **≤$2M** and **≤85% of first-sight** (Solana, not hard-rugged 
 - [docs/0xbot_integration.md](docs/0xbot_integration.md)
 - [docs/OUTCOME_PROTOCOL.md](docs/OUTCOME_PROTOCOL.md)
 - [docs/FEATURE_REGISTRY_v0.md](docs/FEATURE_REGISTRY_v0.md)
-- [docs/ORGANIC_X.md](docs/ORGANIC_X.md) — CA-scoped X cache; set `XINTEL_X_SOCIAL_LIVE=1` for scans
+- [docs/ORGANIC_X.md](docs/ORGANIC_X.md)
+- [docs/MULTI_CHAIN.md](docs/MULTI_CHAIN.md) — BSC/Base/ETH discovery + `live_quote --chain` — CA-scoped X cache; set `XINTEL_X_SOCIAL_LIVE=1` for scans
 - [docs/EARLY_DISCOVERY.md](docs/EARLY_DISCOVERY.md)
 - [reports/BATCH_01_INDEX.md](reports/BATCH_01_INDEX.md)
 - [reports/signal_hypotheses_v0.md](reports/signal_hypotheses_v0.md)

@@ -40,7 +40,7 @@ def is_resolvable_ca(ca: str, chain: str) -> bool:
     if not ca or ca.upper().startswith("TEMPLATE") or ca in {"unknown", "n/a", "-"}:
         return False
     chain = normalize_chain(chain)
-    if chain in {"ethereum", "base", "bsc", "arbitrum", "polygon", "avalanche"}:
+    if chain in {"ethereum", "base", "bsc", "arbitrum", "polygon", "avalanche", "optimism", "unresolved_evm"}:
         return bool(_CA_RE_EVM.match(ca))
     if chain == "solana":
         return bool(_CA_RE_SOL.match(ca))
@@ -93,6 +93,24 @@ class DiscoveryBus:
         """
         chain = normalize_chain(event.chain)
         ca = normalize_ca(event.ca)
+        # EVM CAs must never key as solana mints (and solana never as 0x)
+        if _CA_RE_EVM.match(ca) and chain == "solana":
+            # Prefer chain hint from event confidence / leave unresolvable rather than
+            # polluting solana identity space — adopt ethereum only if explicitly wrong.
+            hinted = (event.confidence_hints or {}).get("chain") or (
+                event.confidence_hints or {}
+            ).get("dex_chain")
+            if hinted and normalize_chain(str(hinted)) != "solana":
+                chain = normalize_chain(str(hinted))
+            else:
+                # Keep separate from solana keyspace using unresolved_evm until enrich
+                # reveals chainId — still not solana.
+                chain = "unresolved_evm"
+        if chain == "solana" and ca.startswith("0x"):
+            chain = "unresolved_evm"
+        if chain in {"ethereum", "base", "bsc", "arbitrum", "polygon", "avalanche"} and not ca.startswith("0x"):
+            # Non-EVM address on EVM chain — leave; gates will reject
+            pass
         key = record_key(chain, ca)
         now = datetime.now(timezone.utc)
         discovered = event.discovered_at

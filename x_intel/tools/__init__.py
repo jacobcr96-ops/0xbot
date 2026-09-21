@@ -1,1 +1,1 @@
-"""CLI helpers for x_intel (agent ingest, stubs — no MCP from Python)."""
+"""CLI helpers for x_intel (live quote, organic X ingest — no MCP from Python)."""

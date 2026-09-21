@@ -180,3 +180,7 @@ Solana preferred; skip hard-rugged / name-parasite clones. Persist `mc_usd_now`,
 See [ORGANIC_X.md](ORGANIC_X.md). Scans should set `XINTEL_X_SOCIAL_LIVE=1`.
 Agent writes `data/x_organic/<mint>.json` (≤5 CAs/cycle); enrich stamps `organic_x`.
 `XINTEL_ORGANIC_X_REQUIRED_FOR_PING=1` → Jacob ping only on organic_x or strong unique curve+profile (no HELLO floods).
+
+## Multi-chain (BSC / Base / ETH)
+
+See [MULTI_CHAIN.md](MULTI_CHAIN.md).

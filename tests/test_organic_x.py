@@ -113,7 +113,7 @@ def test_organic_x_alone_pursue_eligible(tmp_data: Path):
         confidence_hints={},  # no curve social reinforcement
     )
     annotate_organic_x_hints(rec, data_root=tmp_data, now=NOW)
-    gate = score_discovery(rec)
+    gate = score_discovery(rec, now=NOW)
     assert gate.decision == CandidateDecision.pursue
     assert gate.pursue_eligible is True
     assert "publish_quality_evidence" in gate.reasons

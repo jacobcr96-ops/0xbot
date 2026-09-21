@@ -1,7 +1,9 @@
-"""Live market enrich — pump.fun primary, DexScreener fallback.
+"""Live market enrich — pump.fun primary (Solana), DexScreener + GoPlus for EVM.
 
 Never leave enrich as a no-op stub. Prefer pump.fun fields to minimize X spend.
-Respects XINTEL_SKIP_DEX. Importable from pipeline + scripts/live_quote.py.
+Respects XINTEL_SKIP_DEX for Solana only — EVM has no pump fallback so Dex/GoPlus
+stay available. Never invent MC — callers print STALE when mc_usd is unknown.
+Importable from pipeline + x_intel.tools.live_quote / scripts/live_quote.py.
 """
 
 from __future__ import annotations
@@ -15,17 +17,30 @@ from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from x_intel.config import (
+    EVM_CHAINS,
+    dex_chain_id,
+    goplus_chain_id,
+    is_evm_chain,
+)
+
 log = logging.getLogger(__name__)
 
 UA = "x-intel-discovery/0.2"
 PUMPFUN_COIN_URL = "https://frontend-api-v3.pump.fun/coins/{mint}"
 DEX_TOKEN_URL = "https://api.dexscreener.com/latest/dex/tokens/{mint}"
+DEX_TOKEN_CHAIN_URL = "https://api.dexscreener.com/tokens/v1/{chain}/{mint}"
+GOPLUS_SECURITY_URL = (
+    "https://api.gopluslabs.io/api/v1/token_security/{chain_id}"
+    "?contract_addresses={ca}"
+)
 
 # Weak social URL must look like a real profile/status link (not empty junk).
 _SOCIAL_URL_RE = re.compile(
     r"^https?://(www\.)?(x\.com|twitter\.com|t\.me|telegram\.me)/.+",
     re.I,
 )
+_CA_RE_EVM = re.compile(r"^0x[a-fA-F0-9]{40}$")
 
 EARLY_MC_SECONDARY_USD = 2_000_000.0
 
@@ -44,6 +59,29 @@ def skip_dex() -> bool:
 def skip_enrich() -> bool:
     """Test/offline escape hatch — still stamps enriched_at so callers see a no-fetch."""
     return _env_bool("XINTEL_SKIP_ENRICH", default=False)
+
+
+def looks_like_evm_ca(ca: str) -> bool:
+    return bool(_CA_RE_EVM.match((ca or "").strip()))
+
+
+def resolve_quote_chain(ca: str, chain: Optional[str] = None) -> str:
+    """Normalize chain for quoting. EVM CAs are never treated as solana mints."""
+    c = (chain or "").strip().lower()
+    aliases = {
+        "sol": "solana",
+        "eth": "ethereum",
+        "ether": "ethereum",
+        "bnb": "bsc",
+        "binance": "bsc",
+    }
+    c = aliases.get(c, c)
+    if looks_like_evm_ca(ca):
+        if c in EVM_CHAINS:
+            return c
+        # Mis-tagged or missing: empty string → Dex without chain filter (never pump.fun)
+        return ""
+    return c or "solana"
 
 
 def _http_get_json(url: str, *, timeout: float = 10.0) -> Any:
@@ -70,133 +108,344 @@ def is_real_social_url(url: Optional[str]) -> bool:
     return bool(_SOCIAL_URL_RE.match(u))
 
 
+def _pick_dex_pair(
+    pairs: list[Any], *, chain: Optional[str] = None
+) -> Optional[dict[str, Any]]:
+    """Prefer highest-liquidity pair; optionally filter to requested chain."""
+    want = dex_chain_id(chain) if chain else None
+    filtered: list[dict[str, Any]] = []
+    for p in pairs:
+        if not isinstance(p, dict):
+            continue
+        if want:
+            cid = str(p.get("chainId") or "").lower()
+            if cid != want:
+                continue
+        filtered.append(p)
+    use = filtered or [p for p in pairs if isinstance(p, dict)]
+    if not use:
+        return None
+    return sorted(
+        use,
+        key=lambda p: (p.get("liquidity") or {}).get("usd") or 0,
+        reverse=True,
+    )[0]
+
+
+def _quote_from_dex_pair(
+    mint: str,
+    p: dict[str, Any],
+    *,
+    now_iso: str,
+    pump_partial: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    mc = _f(p.get("marketCap") or p.get("fdv"))
+    liq = _f((p.get("liquidity") or {}).get("usd"))
+    price = _f(p.get("priceUsd"))
+    vol = _f((p.get("volume") or {}).get("h24") or (p.get("volume") or {}).get("h1"))
+    socials = (p.get("info") or {}).get("socials") or []
+    boosts = p.get("boosts") or {}
+    base = p.get("baseToken") or {}
+    chain_id = str(p.get("chainId") or "").lower() or None
+    out: dict[str, Any] = {
+        "ok": mc is not None,  # never invent MC — liq alone is not ok for live MC
+        "mint": mint,
+        "ca": mint,
+        "chain": chain_id,
+        "ticker": base.get("symbol") or (pump_partial or {}).get("ticker"),
+        "name": base.get("name") or (pump_partial or {}).get("name"),
+        "mc_usd": mc if mc is not None else (pump_partial or {}).get("mc_usd"),
+        "price_usd": price,
+        "liq_usd": liq,
+        "volume_h24": vol,
+        "chg_1h": (p.get("priceChange") or {}).get("h1"),
+        "dex_socials": socials,
+        "dex_boosts": boosts,
+        "twitter": (pump_partial or {}).get("twitter") or "",
+        "telegram": (pump_partial or {}).get("telegram") or "",
+        "source": "dexscreener",
+        "fetched_at": now_iso,
+        "age_sec": 0,
+        "stale": mc is None,
+    }
+    if pump_partial:
+        for k in ("twitter", "telegram", "website", "complete", "reply_count", "ath_market_cap"):
+            if pump_partial.get(k) not in (None, ""):
+                out[k] = pump_partial[k]
+        if out.get("mc_usd") is None and pump_partial.get("mc_usd") is not None:
+            out["mc_usd"] = pump_partial["mc_usd"]
+            out["source"] = "pump.fun+dexscreener"
+            out["ok"] = True
+            out["stale"] = False
+    return out
+
+
+def _fetch_dex_quote(
+    mint: str,
+    *,
+    chain: Optional[str],
+    timeout: float,
+) -> tuple[Optional[dict[str, Any]], list[str]]:
+    errors: list[str] = []
+    # Prefer chain-scoped endpoint when we know the EVM/solana chain id
+    dex_id = dex_chain_id(chain) if chain else None
+    urls: list[str] = []
+    if dex_id and dex_id != "solana":
+        urls.append(DEX_TOKEN_CHAIN_URL.format(chain=dex_id, mint=mint))
+    urls.append(DEX_TOKEN_URL.format(mint=mint))
+
+    for url in urls:
+        try:
+            d = _http_get_json(url, timeout=timeout)
+            if isinstance(d, list):
+                pairs = d
+            elif isinstance(d, dict):
+                pairs = d.get("pairs") or d.get("pair") or []
+                if isinstance(pairs, dict):
+                    pairs = [pairs]
+            else:
+                pairs = []
+            if not isinstance(pairs, list):
+                pairs = []
+            p = _pick_dex_pair(pairs, chain=chain if chain and chain != "solana" else None)
+            # If chain filter emptied results but we have pairs, retry without filter
+            # only when chain was unknown; when chain specified keep filter strict.
+            if p is None and pairs and chain and is_evm_chain(chain):
+                errors.append(f"dex:no_pairs_on_{chain}")
+                continue
+            if p is None and pairs:
+                p = _pick_dex_pair(pairs, chain=None)
+            if p is None:
+                errors.append("dex:no_pairs")
+                continue
+            return _quote_from_dex_pair(mint, p, now_iso=datetime.now(timezone.utc).isoformat()), errors
+        except HTTPError as e:
+            errors.append(f"dex:HTTP{e.code}")
+            if e.code == 429:
+                break  # don't hammer alternate URL
+        except (URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as e:
+            errors.append(f"dex:{type(e).__name__}")
+    return None, errors
+
+
+def _fetch_goplus_meta(
+    mint: str,
+    *,
+    chain: str,
+    timeout: float,
+) -> tuple[Optional[dict[str, Any]], list[str]]:
+    """GoPlus token_security — metadata + is_in_dex only; never invents MC."""
+    errors: list[str] = []
+    cid = goplus_chain_id(chain)
+    if not cid:
+        return None, [f"goplus:unsupported_chain:{chain}"]
+    url = GOPLUS_SECURITY_URL.format(chain_id=cid, ca=mint.lower())
+    try:
+        d = _http_get_json(url, timeout=timeout)
+    except HTTPError as e:
+        return None, [f"goplus:HTTP{e.code}"]
+    except (URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as e:
+        return None, [f"goplus:{type(e).__name__}"]
+
+    if not isinstance(d, dict) or int(d.get("code") or 0) != 1:
+        return None, [f"goplus:bad_payload:{d.get('message') if isinstance(d, dict) else type(d).__name__}"]
+
+    result = d.get("result") or {}
+    if not isinstance(result, dict) or not result:
+        return None, ["goplus:empty_result"]
+
+    # Key may be lowercased CA
+    tok = result.get(mint.lower()) or result.get(mint) or next(iter(result.values()), None)
+    if not isinstance(tok, dict):
+        return None, ["goplus:no_token"]
+
+    is_in_dex = str(tok.get("is_in_dex") or "").strip() in {"1", "true", "True"}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    out: dict[str, Any] = {
+        "ok": False,  # no MC from GoPlus
+        "mint": mint,
+        "ca": mint,
+        "chain": chain,
+        "ticker": tok.get("token_symbol"),
+        "name": tok.get("token_name"),
+        "mc_usd": None,
+        "price_usd": None,
+        "liq_usd": None,
+        "is_in_dex": is_in_dex,
+        "holder_count": _f(tok.get("holder_count")),
+        "total_supply": tok.get("total_supply"),
+        "is_honeypot": str(tok.get("is_honeypot") or "") in {"1", "true"},
+        "buy_tax": tok.get("buy_tax"),
+        "sell_tax": tok.get("sell_tax"),
+        "source": "goplus",
+        "fetched_at": now_iso,
+        "age_sec": 0,
+        "stale": True,
+        "goplus": {
+            "is_in_dex": is_in_dex,
+            "holder_count": tok.get("holder_count"),
+            "dex_n": len(tok.get("dex") or []) if isinstance(tok.get("dex"), list) else 0,
+        },
+    }
+    return out, errors
+
+
 def quote_mint(
     mint: str,
     *,
+    chain: Optional[str] = None,
     timeout: float = 10.0,
     allow_dex: Optional[bool] = None,
 ) -> dict[str, Any]:
-    """Live quote for a mint/CA. pump.fun first, then Dex unless skipped.
+    """Live quote for a mint/CA.
 
-    Returns dict with ok, mint, ticker, name, mc_usd, price_usd, liq_usd,
-    source, fetched_at, age_sec, plus pump social/volume fields when available.
+    Solana: pump.fun first, then Dex unless XINTEL_SKIP_DEX.
+    EVM (bsc/base/ethereum/… or 0x CA): DexScreener (chain-filtered), then GoPlus
+    metadata fallback. Never invents mc_usd — sets stale=True when unknown.
+
+    Returns dict with ok, mint/ca, chain, ticker, name, mc_usd, price_usd, liq_usd,
+    source, fetched_at, age_sec, stale.
     """
     mint = (mint or "").strip()
     errors: list[str] = []
-    use_dex = (not skip_dex()) if allow_dex is None else allow_dex
     now_iso = datetime.now(timezone.utc).isoformat()
 
     if not mint:
-        return {"ok": False, "mint": mint, "errors": ["empty_mint"], "fetched_at": now_iso, "stale": True}
+        return {
+            "ok": False,
+            "mint": mint,
+            "ca": mint,
+            "errors": ["empty_mint"],
+            "fetched_at": now_iso,
+            "stale": True,
+        }
 
-    # 1) pump.fun
-    try:
-        d = _http_get_json(PUMPFUN_COIN_URL.format(mint=mint), timeout=timeout)
-        if isinstance(d, dict):
-            # market_cap on pump is often SOL-denominated; prefer usd_* only for mc_usd
-            mc = _f(d.get("usd_market_cap") or d.get("market_cap_usd"))
-            out: dict[str, Any] = {
-                "ok": mc is not None,
-                "mint": mint,
-                "ticker": d.get("symbol"),
-                "name": d.get("name"),
-                "mc_usd": mc,
-                "price_usd": None,
-                "liq_usd": None,
-                "complete": d.get("complete"),
-                "twitter": d.get("twitter") or "",
-                "telegram": d.get("telegram") or "",
-                "website": d.get("website") or "",
-                "reply_count": d.get("reply_count"),
-                "created_timestamp": d.get("created_timestamp"),
-                "ath_market_cap": _f(d.get("ath_market_cap")),
-                "virtual_sol_reserves": _f(d.get("virtual_sol_reserves") or d.get("real_sol_reserves")),
-                "source": "pump.fun",
-                "fetched_at": now_iso,
-                "age_sec": 0,
-                "raw_pump": {k: d.get(k) for k in ("symbol", "name", "complete", "nsfw")},
-            }
-            if mc is not None:
-                return out
-            errors.append("pump:no_mc")
-            # Keep partial pump identity even if MC missing — fall through to dex
-            pump_partial = out
-        else:
-            errors.append("pump:bad_payload")
-            pump_partial = None
-    except HTTPError as e:
-        errors.append(f"pump:HTTP{e.code}")
-        pump_partial = None
-    except (URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as e:
-        errors.append(f"pump:{type(e).__name__}")
-        pump_partial = None
+    chain_n = resolve_quote_chain(mint, chain)
+    evm = is_evm_chain(chain_n) or looks_like_evm_ca(mint)
 
-    # 2) dexscreener token
-    if use_dex:
+    # EVM: Dex always available by default (no pump). Solana: respect SKIP_DEX.
+    if allow_dex is None:
+        use_dex = True if evm else (not skip_dex())
+    else:
+        use_dex = allow_dex
+
+    pump_partial: Optional[dict[str, Any]] = None
+
+    # --- Solana: pump.fun first ---
+    if not evm:
         try:
-            d = _http_get_json(DEX_TOKEN_URL.format(mint=mint), timeout=timeout)
-            pairs = d.get("pairs") or [] if isinstance(d, dict) else []
-            pairs = sorted(
-                pairs,
-                key=lambda p: (p.get("liquidity") or {}).get("usd") or 0,
-                reverse=True,
-            )
-            if pairs:
-                p = pairs[0]
-                mc = _f(p.get("marketCap") or p.get("fdv"))
-                liq = _f((p.get("liquidity") or {}).get("usd"))
-                price = _f(p.get("priceUsd"))
-                vol = _f((p.get("volume") or {}).get("h24") or (p.get("volume") or {}).get("h1"))
-                socials = (p.get("info") or {}).get("socials") or []
-                boosts = p.get("boosts") or {}
-                base = p.get("baseToken") or {}
-                out = {
-                    "ok": mc is not None or liq is not None,
+            d = _http_get_json(PUMPFUN_COIN_URL.format(mint=mint), timeout=timeout)
+            if isinstance(d, dict):
+                mc = _f(d.get("usd_market_cap") or d.get("market_cap_usd"))
+                out: dict[str, Any] = {
+                    "ok": mc is not None,
                     "mint": mint,
-                    "ticker": base.get("symbol") or (pump_partial or {}).get("ticker"),
-                    "name": base.get("name") or (pump_partial or {}).get("name"),
-                    "mc_usd": mc if mc is not None else (pump_partial or {}).get("mc_usd"),
-                    "price_usd": price,
-                    "liq_usd": liq,
-                    "volume_h24": vol,
-                    "chg_1h": (p.get("priceChange") or {}).get("h1"),
-                    "dex_socials": socials,
-                    "dex_boosts": boosts,
-                    "twitter": (pump_partial or {}).get("twitter") or "",
-                    "telegram": (pump_partial or {}).get("telegram") or "",
-                    "source": "dexscreener",
+                    "ca": mint,
+                    "chain": "solana",
+                    "ticker": d.get("symbol"),
+                    "name": d.get("name"),
+                    "mc_usd": mc,
+                    "price_usd": None,
+                    "liq_usd": None,
+                    "complete": d.get("complete"),
+                    "twitter": d.get("twitter") or "",
+                    "telegram": d.get("telegram") or "",
+                    "website": d.get("website") or "",
+                    "reply_count": d.get("reply_count"),
+                    "created_timestamp": d.get("created_timestamp"),
+                    "ath_market_cap": _f(d.get("ath_market_cap")),
+                    "virtual_sol_reserves": _f(
+                        d.get("virtual_sol_reserves") or d.get("real_sol_reserves")
+                    ),
+                    "source": "pump.fun",
                     "fetched_at": now_iso,
                     "age_sec": 0,
+                    "stale": mc is None,
+                    "raw_pump": {k: d.get(k) for k in ("symbol", "name", "complete", "nsfw")},
                 }
-                # Prefer pump socials if we had them
-                if pump_partial:
-                    for k in ("twitter", "telegram", "website", "complete", "reply_count", "ath_market_cap"):
-                        if pump_partial.get(k) not in (None, ""):
-                            out[k] = pump_partial[k]
-                    if out.get("mc_usd") is None and pump_partial.get("mc_usd") is not None:
-                        out["mc_usd"] = pump_partial["mc_usd"]
-                        out["source"] = "pump.fun+dexscreener"
-                if out.get("ok"):
+                if mc is not None:
                     return out
-                errors.append("dex:no_mc_liq")
+                errors.append("pump:no_mc")
+                pump_partial = out
             else:
-                errors.append("dex:no_pairs")
+                errors.append("pump:bad_payload")
         except HTTPError as e:
-            errors.append(f"dex:HTTP{e.code}")
+            errors.append(f"pump:HTTP{e.code}")
         except (URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as e:
-            errors.append(f"dex:{type(e).__name__}")
+            errors.append(f"pump:{type(e).__name__}")
+
+    # --- DexScreener ---
+    if use_dex:
+        dex_out, dex_errs = _fetch_dex_quote(mint, chain=chain_n if evm else "solana", timeout=timeout)
+        errors.extend(dex_errs)
+        if dex_out is not None:
+            if pump_partial:
+                for k in ("twitter", "telegram", "website", "complete", "reply_count", "ath_market_cap"):
+                    if pump_partial.get(k) not in (None, ""):
+                        dex_out[k] = pump_partial[k]
+                if dex_out.get("mc_usd") is None and pump_partial.get("mc_usd") is not None:
+                    dex_out["mc_usd"] = pump_partial["mc_usd"]
+                    dex_out["source"] = "pump.fun+dexscreener"
+                    dex_out["ok"] = True
+                    dex_out["stale"] = False
+            if dex_out.get("chain") is None:
+                dex_out["chain"] = chain_n
+            if dex_out.get("ok") or dex_out.get("mc_usd") is not None:
+                return dex_out
+            # Keep partial dex identity for GoPlus merge
+            dex_partial = dex_out
+        else:
+            dex_partial = None
     else:
         errors.append("dex:skipped")
+        dex_partial = None
 
-    # Return pump partial identity if we had it (even without MC)
+    # --- GoPlus fallback (EVM metadata; never invents MC) ---
+    if evm:
+        gp_chain = chain_n if is_evm_chain(chain_n) else (
+            str((dex_partial or {}).get("chain") or "") if dex_partial else ""
+        )
+        if not is_evm_chain(gp_chain):
+            # Without a known EVM chain GoPlus cannot run; leave metadata empty
+            gp, gp_errs = None, ["goplus:need_chain"]
+        else:
+            gp, gp_errs = _fetch_goplus_meta(mint, chain=gp_chain, timeout=timeout)
+        errors.extend(gp_errs)
+        if gp is not None:
+            if dex_partial:
+                # Prefer dex identity/price/liq; keep goplus meta + stale MC
+                for k in ("ticker", "name", "price_usd", "liq_usd", "volume_h24", "dex_socials"):
+                    if dex_partial.get(k) not in (None, "", []):
+                        gp[k] = dex_partial[k]
+                if dex_partial.get("mc_usd") is not None:
+                    gp["mc_usd"] = dex_partial["mc_usd"]
+                    gp["ok"] = True
+                    gp["stale"] = False
+                    gp["source"] = "dexscreener+goplus"
+                else:
+                    gp["source"] = "goplus"
+                    gp["stale"] = True
+                    gp["ok"] = False
+            gp["errors"] = errors
+            return gp
+
     if pump_partial is not None:
         pump_partial["ok"] = pump_partial.get("mc_usd") is not None
         pump_partial["errors"] = errors
+        pump_partial["stale"] = pump_partial.get("mc_usd") is None
         return pump_partial
+
+    if dex_partial is not None:
+        dex_partial["errors"] = errors
+        dex_partial["stale"] = dex_partial.get("mc_usd") is None
+        dex_partial["ok"] = dex_partial.get("mc_usd") is not None
+        return dex_partial
 
     return {
         "ok": False,
         "mint": mint,
+        "ca": mint,
+        "chain": chain_n,
         "errors": errors,
         "fetched_at": now_iso,
         "stale": True,
@@ -217,14 +466,13 @@ def apply_quote_to_record(rec: Any, quote: dict[str, Any]) -> Any:
     if "mc_at_first_seen" not in feats:
         feats["mc_at_first_seen"] = getattr(rec, "mc_usd", None)
 
-    if quote.get("ok") or quote.get("mc_usd") is not None or quote.get("name"):
+    if quote.get("ok") or quote.get("mc_usd") is not None or quote.get("name") or quote.get("ticker"):
         if quote.get("mc_usd") is not None:
             rec.mc_usd = float(quote["mc_usd"])
         if quote.get("liq_usd") is not None:
             rec.liquidity_usd = float(quote["liq_usd"])
         if quote.get("ticker"):
             rec.ticker = quote["ticker"]
-        # Identity from chain — keep name/symbol so Shielded Cat ≠ random SCAT clone
         name = quote.get("name")
         symbol = quote.get("ticker") or quote.get("symbol")
         if name:
@@ -245,6 +493,19 @@ def apply_quote_to_record(rec: Any, quote: dict[str, Any]) -> Any:
                 rec.price_usd = float(quote["price_usd"])  # type: ignore[attr-defined]
             except Exception:  # noqa: BLE001
                 pass
+        if quote.get("is_in_dex") is not None:
+            hints["is_in_dex"] = quote["is_in_dex"]
+        if quote.get("stale"):
+            hints["mc_stale"] = True
+
+        # Never overwrite EVM chain with solana from a bad quote
+        q_chain = quote.get("chain")
+        rec_chain = (getattr(rec, "chain", None) or "").lower()
+        if q_chain and is_evm_chain(str(q_chain)) and rec_chain == "solana":
+            try:
+                rec.chain = str(q_chain)  # type: ignore[attr-defined]
+            except Exception:  # noqa: BLE001
+                pass
 
         mc_source = quote.get("source") or "unknown"
         hints["mc_source"] = mc_source
@@ -256,8 +517,8 @@ def apply_quote_to_record(rec: Any, quote: dict[str, Any]) -> Any:
         feats["mc_source"] = mc_source
         feats["liquidity_usd"] = getattr(rec, "liquidity_usd", None)
         feats["enrich_ok"] = bool(quote.get("ok") or quote.get("mc_usd") is not None)
+        feats["quote_stale"] = bool(quote.get("stale"))
 
-        # --- Cheap secondary quality when organic X is empty ---
         twitter = quote.get("twitter") or ""
         telegram = quote.get("telegram") or ""
         if is_real_social_url(twitter):
@@ -269,7 +530,6 @@ def apply_quote_to_record(rec: Any, quote: dict[str, Any]) -> Any:
             hints["weak_narrative"] = True
             hints["verified_social"] = True
 
-        # Dex socials / boosts (weak)
         for s in quote.get("dex_socials") or []:
             if not isinstance(s, dict):
                 continue
@@ -282,10 +542,8 @@ def apply_quote_to_record(rec: Any, quote: dict[str, Any]) -> Any:
         boosts = quote.get("dex_boosts") or {}
         if isinstance(boosts, dict) and (boosts.get("active") or 0):
             hints["dex_boost_active"] = boosts.get("active")
-            # boost alone is paid — do NOT mark organic
             hints["boost_only"] = hints.get("boost_only", True) and not hints.get("verified_social")
 
-        # Volume → weak flow_hint (not enough alone for BUY)
         vol = _f(quote.get("volume_h24"))
         vsol = _f(quote.get("virtual_sol_reserves"))
         if vol is not None and vol > 0:
@@ -293,8 +551,7 @@ def apply_quote_to_record(rec: Any, quote: dict[str, Any]) -> Any:
             hints["volume_flow_hint"] = True
         if vsol is not None and vsol > 0:
             hints["virtual_sol_reserves"] = vsol
-            # Non-trivial curve activity as weak flow
-            if vsol >= 5.0:  # ~$500+ at ~$100 SOL — soft threshold
+            if vsol >= 5.0:
                 hints["volume_flow_hint"] = True
 
         ath = _f(quote.get("ath_market_cap"))
@@ -308,16 +565,13 @@ def apply_quote_to_record(rec: Any, quote: dict[str, Any]) -> Any:
                     hints["mc_rising"] = True
             except (TypeError, ValueError):
                 pass
-        # Live enrich with MC present counts as rising/fresh for first sight
         if mc is not None and hints.get("mc_rising") is not True:
-            # First enrich: treat positive live MC under early band as fresh print
             if float(mc) < EARLY_MC_SECONDARY_USD:
                 hints.setdefault("mc_live_early", True)
 
         if quote.get("complete") is True:
             hints["pump_complete"] = True
 
-        # Prefer chain create time when record lacks pair_created_at
         if getattr(rec, "pair_created_at", None) is None and quote.get("created_timestamp") is not None:
             try:
                 ts = float(quote["created_timestamp"])
@@ -330,6 +584,8 @@ def apply_quote_to_record(rec: Any, quote: dict[str, Any]) -> Any:
         feats["enrich_ok"] = False
         feats["enrich_errors"] = quote.get("errors") or ["unknown"]
         hints["mc_source"] = "enrich_failed"
+        if quote.get("stale"):
+            hints["mc_stale"] = True
 
     rec.confidence_hints = hints
     rec.discovery_latency_features = feats
@@ -346,6 +602,7 @@ def enrich_record(
     """Live-enrich a DiscoveryRecord by mint/CA. Never a silent no-op."""
     now = datetime.now(timezone.utc)
     ca = (getattr(rec, "ca", None) or "").strip()
+    chain = getattr(rec, "chain", None)
     feats = dict(getattr(rec, "discovery_latency_features", None) or {})
     feats["enriched_at"] = now.isoformat()
     feats["source"] = getattr(rec, "first_source", None) or feats.get("source")
@@ -364,7 +621,26 @@ def enrich_record(
         rec.discovery_latency_features = feats
         return rec
 
-    quote = quote_mint(ca, timeout=timeout, allow_dex=allow_dex)
+    # Guard: EVM CA must not be quoted via pump.fun as a solana mint
+    if looks_like_evm_ca(ca) and (chain or "").lower() == "solana":
+        log.warning(
+            "enrich: EVM ca tagged solana — skipping pump path ca=%s…", ca[:12]
+        )
+        chain = None  # quote_mint treats 0x as EVM; Dex may reveal real chainId
+
+    quote = quote_mint(ca, chain=chain, timeout=timeout, allow_dex=allow_dex)
+    # If Dex/GoPlus revealed an EVM chain and record was mis-tagged solana, fix identity
+    q_chain = (quote or {}).get("chain")
+    if (
+        looks_like_evm_ca(ca)
+        and q_chain
+        and is_evm_chain(str(q_chain))
+        and (getattr(rec, "chain", None) or "").lower() == "solana"
+    ):
+        try:
+            rec.chain = str(q_chain)
+        except Exception:  # noqa: BLE001
+            pass
     return apply_quote_to_record(rec, quote)
 
 
@@ -373,6 +649,8 @@ __all__ = [
     "enrich_record",
     "apply_quote_to_record",
     "is_real_social_url",
+    "looks_like_evm_ca",
+    "resolve_quote_chain",
     "skip_dex",
     "skip_enrich",
     "EARLY_MC_SECONDARY_USD",
