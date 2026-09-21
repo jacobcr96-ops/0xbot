@@ -174,3 +174,9 @@ Module: `x_intel/discovery/watch_escalate.py` (wired in `runner.run_cycle` after
 | Flag | `watch_dip_buy` on real BUY (no shadow/calibration) |
 
 Solana preferred; skip hard-rugged / name-parasite clones. Persist `mc_usd_now`, `min_mc_usd_seen`, `refreshed_at`.
+
+## Organic X (Jacob ping)
+
+See [ORGANIC_X.md](ORGANIC_X.md). Scans should set `XINTEL_X_SOCIAL_LIVE=1`.
+Agent writes `data/x_organic/<mint>.json` (≤5 CAs/cycle); enrich stamps `organic_x`.
+`XINTEL_ORGANIC_X_REQUIRED_FOR_PING=1` → Jacob ping only on organic_x or strong unique curve+profile (no HELLO floods).

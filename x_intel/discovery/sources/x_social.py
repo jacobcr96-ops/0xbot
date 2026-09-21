@@ -5,8 +5,9 @@ remain primary for earliest practical discovery.
 
 Live X (MCP search by mint CA, not ticker alone) is intentionally OFF by default
 to minimize X credit spend. Prefer pump.fun ``twitter``/``telegram`` fields from
-``x_intel.discovery.enrich`` as weak narrative hints. Set
-``XINTEL_X_SOCIAL_LIVE=1`` only when credits allow CA-scoped recent-post search.
+``x_intel.discovery.enrich`` as weak narrative hints. For real organic quality,
+agents write ``data/x_organic/<mint>.json`` (see ``x_intel.discovery.organic_x``)
+and set ``XINTEL_X_SOCIAL_LIVE=1`` / ``XINTEL_ORGANIC_X_REQUIRED_FOR_PING=1``.
 """
 
 from __future__ import annotations

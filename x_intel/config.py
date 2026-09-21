@@ -88,3 +88,14 @@ DEFAULT_EARLY_MC_USD_MAX = 1_000_000.0
 DEFAULT_BUY_PERCENT_EQUITY = 1.0
 # FOMO min notional ~$2.10; on ~$300 equity need >=~0.7%
 MIN_BUY_PERCENT_EQUITY = 0.75
+
+
+def x_social_live_enabled() -> bool:
+    """Scans should set XINTEL_X_SOCIAL_LIVE=1 for CA-scoped organic X path."""
+    return _env_bool("XINTEL_X_SOCIAL_LIVE", default=False)
+
+
+def organic_x_required_for_ping() -> bool:
+    """Jacob ping / xintel publish prefer organic_x when enabled."""
+    return _env_bool("XINTEL_ORGANIC_X_REQUIRED_FOR_PING", default=False)
+

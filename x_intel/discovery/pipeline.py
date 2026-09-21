@@ -21,6 +21,7 @@ from x_intel.discovery.fanout import write_work_orders
 from x_intel.discovery.gates import BUY_TTL_SECONDS, GateResult, score_discovery
 from x_intel.discovery.models import DiscoveryEvent, DiscoveryRecord
 from x_intel.discovery.enrich import enrich_record
+from x_intel.discovery.organic_x import annotate_organic_x_hints
 from x_intel.discovery.parasite import annotate_parasite_hints
 from x_intel.discovery.clone_farm import annotate_clone_farm_hints
 from x_intel.emit.pursue_buy import GateReject, emit_pursue_buy
@@ -55,6 +56,23 @@ def _evidence_from_record(rec: DiscoveryRecord) -> list[dict[str, Any]]:
                 else datetime.now(timezone.utc).isoformat(),
                 "refs": [],
                 "weight": 0.5,
+            }
+        )
+    if hints.get("organic_x") is True:
+        refs = list(hints.get("organic_x_refs") or [])
+        items.append(
+            {
+                "channel": "x_social",
+                "summary": (
+                    "organic_x CA-scoped recent posts "
+                    f"matching_n={(hints.get('organic_x_eval') or {}).get('matching_n')} "
+                    f"reasons={(hints.get('organic_x_eval') or {}).get('reasons')}"
+                ),
+                "observed_at": (rec.enriched_at or rec.first_seen_at).isoformat()
+                if (rec.enriched_at or rec.first_seen_at)
+                else datetime.now(timezone.utc).isoformat(),
+                "refs": refs[:5],
+                "weight": 0.75,
             }
         )
     if hints.get("verified_social") or hints.get("pump_twitter") or hints.get("pump_telegram"):
@@ -155,6 +173,8 @@ def enrich_market(rec: DiscoveryRecord) -> DiscoveryRecord:
     rec.discovery_latency_features = feats
 
     rec = enrich_record(rec)
+    # CA-scoped organic X cache (agent-written data/x_organic/<mint>.json)
+    rec = annotate_organic_x_hints(rec)
     rec = annotate_parasite_hints(rec)
 
     # Ensure enriched_at / mc_source always stamped on the record
@@ -319,6 +339,8 @@ def ingest_event(
     rec = enrich_market(rec)
     # Ticker uniqueness / clone-storm from bus peers (KNOWN farm tickers seeded in clone_farm)
     rec = annotate_clone_farm_hints(rec, peers=discovery_bus.all_records())
+    # Re-apply organic_x after clone hints so ping gate sees both
+    rec = annotate_organic_x_hints(rec, data_root=root)
     gate = score_discovery(rec, enriched_liq_usd=rec.liquidity_usd)
     cand = upsert_candidate(rec, gate, ledger=led)
     discovery_bus.persist()

@@ -1,0 +1,22 @@
+{
+  "query": "He5XcCaLrygisurxfDYH7vumKW5yopVZcA9DKPvpH4Lz",
+  "queried_at": "2026-09-20T23:50:00+00:00",
+  "posts": [
+    {
+      "id": "2101999000000000001",
+      "text": "Shielded Cat looking clean — CA He5XcCaLrygisurxfDYH7vumKW5yopVZcA9DKPvpH4Lz early",
+      "author": "catwatcher",
+      "created_at": "2026-09-20T23:40:00+00:00",
+      "url": "https://x.com/catwatcher/status/2101999000000000001",
+      "metrics": {"like_count": 4, "repost_count": 1}
+    },
+    {
+      "id": "2101999000000000002",
+      "text": "just $SCAT moon soon",
+      "author": "tickeronlybot",
+      "created_at": "2026-09-20T23:45:00+00:00",
+      "url": "https://x.com/tickeronlybot/status/2101999000000000002",
+      "metrics": {"like_count": 0}
+    }
+  ]
+}

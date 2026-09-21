@@ -35,3 +35,7 @@ data/discovery_bus.json
 data/health/pump_cursor.json
 data/health/pump_cursor.json.tmp
 data/health/dex_cooldown_until
+
+# organic X CA-scoped search cache (agent-written; keep dir)
+data/x_organic/*.json
+!data/x_organic/.gitkeep

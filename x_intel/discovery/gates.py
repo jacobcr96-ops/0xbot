@@ -150,12 +150,19 @@ def _sources(rec: DiscoveryRecord) -> list[str]:
 
 
 def _organic_x_evidence(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
-    """Organic X evidence (not boost-only / paid-boost)."""
-    if "x_social" not in _sources(rec) and not hints.get("x_social"):
-        return False
+    """Organic X evidence (not boost-only / paid-boost).
+
+    Prefer explicit ``organic_x=True`` from ``data/x_organic/<mint>.json``
+    (see ``x_intel.discovery.organic_x``). Legacy: x_social source without
+    ``organic_x=False`` still counts so fixture CA mentions keep working.
+    """
     if hints.get("boost_only") is True or hints.get("paid_boost") is True:
         return False
+    if hints.get("organic_x") is True:
+        return True
     if hints.get("organic_x") is False:
+        return False
+    if "x_social" not in _sources(rec) and not hints.get("x_social"):
         return False
     return True
 
@@ -295,6 +302,35 @@ def has_publish_quality_evidence(rec: DiscoveryRecord, hints: Optional[dict[str,
         or _curve_plus_verified_social(rec, h)
         or _volume_flow_quality(rec, h)
     )
+
+
+def has_ping_quality_evidence(
+    rec: DiscoveryRecord, hints: Optional[dict[str, Any]] = None
+) -> bool:
+    """Jacob ping / xintel publish preference — stricter than disk BUY.
+
+    Disk BUY may still use curve+pump social for research. When
+    ``XINTEL_ORGANIC_X_REQUIRED_FOR_PING=1``, ping only if:
+      - real ``organic_x=True`` (CA-scoped recent posts), OR
+      - strong unique curve+profile (non-status-spam twitter + unique ticker)
+    Clone-farm / spam tickers never ping (keeps HELLO floods off Jacob).
+    When the env flag is off, falls back to ``has_publish_quality_evidence``.
+    """
+    from x_intel.discovery.organic_x import (
+        organic_x_required_for_ping,
+        strong_unique_curve_profile,
+    )
+
+    h = hints if hints is not None else _feature_hints(rec)
+    if h.get("clone_storm") is True or h.get("spam_farm_ticker") is True:
+        return False
+    if h.get("parasite") is True or h.get("parasite_of_runner") is True:
+        return False
+    if not organic_x_required_for_ping():
+        return has_publish_quality_evidence(rec, h)
+    if h.get("organic_x") is True and _organic_x_evidence(rec, h):
+        return True
+    return strong_unique_curve_profile(rec, h)
 
 
 def has_watch_dip_quality_evidence(
