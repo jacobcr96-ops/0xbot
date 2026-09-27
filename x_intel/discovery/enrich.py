@@ -375,6 +375,21 @@ def quote_mint(
             errors.append(f"pump:{type(e).__name__}")
 
     # --- DexScreener ---
+    # Emergency fallback: pump /coins/{mint} has been returning HTTP 404 while the
+    # list endpoint still works. When SKIP_DEX would leave Solana blind after a
+    # pump failure, try Dex once so live MC is not permanently STALE.
+    if (
+        not use_dex
+        and not evm
+        and any(e.startswith("pump:") for e in errors)
+    ):
+        log.warning(
+            "quote_mint: pump failed (%s); emergency Dex fallback ca=%s…",
+            ",".join(errors),
+            mint[:12],
+        )
+        use_dex = True
+
     if use_dex:
         dex_out, dex_errs = _fetch_dex_quote(mint, chain=chain_n if evm else "solana", timeout=timeout)
         errors.extend(dex_errs)
@@ -592,6 +607,40 @@ def apply_quote_to_record(rec: Any, quote: dict[str, Any]) -> Any:
     return rec
 
 
+LIST_MC_MAX_AGE_SEC = 600.0
+
+
+def _same_cycle_list_quote(rec: Any, ca: str, *, now: datetime) -> Optional[dict[str, Any]]:
+    feats = getattr(rec, "discovery_latency_features", None) or {}
+    mc = _f(feats.get("last_event_mc_usd"))
+    src = str(feats.get("last_event_mc_source") or "").lower()
+    at_raw = feats.get("last_event_mc_at")
+    if mc is None or "pumpfun" not in src or not at_raw:
+        return None
+    try:
+        at = datetime.fromisoformat(str(at_raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=timezone.utc)
+    age = (now - at).total_seconds()
+    if age < 0 or age > LIST_MC_MAX_AGE_SEC:
+        return None
+    return {
+        "ok": True,
+        "mint": ca,
+        "ca": ca,
+        "chain": getattr(rec, "chain", None) or "solana",
+        "mc_usd": mc,
+        "ticker": getattr(rec, "ticker", None) or getattr(rec, "symbol", None),
+        "name": getattr(rec, "name", None),
+        "source": "pump.fun_list",
+        "fetched_at": at.isoformat(),
+        "age_sec": int(age),
+        "stale": False,
+    }
+
+
 def enrich_record(
     rec: Any,
     *,
@@ -629,6 +678,14 @@ def enrich_record(
         chain = None  # quote_mint treats 0x as EVM; Dex may reveal real chainId
 
     quote = quote_mint(ca, chain=chain, timeout=timeout, allow_dex=allow_dex)
+    # Same-cycle pump.fun list poll already carried MC; coin detail route may 404.
+    # Only trust the list MC stamped by this sighting (bus.upsert) and only while
+    # fresh — rec.mc_usd itself may be an older quote from a previous cycle.
+    if not (quote.get("ok") or quote.get("mc_usd") is not None):
+        list_q = _same_cycle_list_quote(rec, ca, now=now)
+        if list_q is not None:
+            list_q["errors"] = list(quote.get("errors") or []) + ["used_list_mc_after_coin_fail"]
+            quote = list_q
     # If Dex/GoPlus revealed an EVM chain and record was mis-tagged solana, fix identity
     q_chain = (quote or {}).get("chain")
     if (

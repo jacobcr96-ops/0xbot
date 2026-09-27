@@ -51,6 +51,18 @@ def record_key(chain: str, ca: str) -> str:
     return f"{normalize_chain(chain)}::{normalize_ca(ca)}"
 
 
+
+def _stamp_event_mc(rec: DiscoveryRecord, event: DiscoveryEvent, now: datetime) -> None:
+    """Record this sighting's source MC + time so enrich can tell same-cycle
+    list MC apart from an older quote already sitting on rec.mc_usd."""
+    if event.mc_usd is None:
+        return
+    feats = dict(rec.discovery_latency_features or {})
+    feats["last_event_mc_usd"] = float(event.mc_usd)
+    feats["last_event_mc_source"] = str(getattr(event.source, "value", event.source))
+    feats["last_event_mc_at"] = now.isoformat()
+    rec.discovery_latency_features = feats
+
 class DiscoveryBus:
     """In-memory + optional on-disk dedupe store.
 
@@ -143,6 +155,7 @@ class DiscoveryBus:
                 },
                 updated_at=now,
             )
+            _stamp_event_mc(rec, event, now)
             self._records[key] = rec
             return rec, True
 
@@ -160,6 +173,7 @@ class DiscoveryBus:
             existing.symbol = ev_sym
         if event.mc_usd is not None and existing.mc_usd is None:
             existing.mc_usd = event.mc_usd
+        _stamp_event_mc(existing, event, now)
         if event.curve_progress is not None:
             existing.curve_progress = event.curve_progress
         if event.liquidity_usd is not None and (

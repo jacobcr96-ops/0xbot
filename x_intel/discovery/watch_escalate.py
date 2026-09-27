@@ -313,6 +313,12 @@ def fetch_mc_usd(
         mc = _fetch_pumpfun_mc(ca, timeout_s=timeout_s)
         if mc is not None:
             return mc
+        # Emergency: pump coin detail 404s — try Dex even when SKIP_DEX.
+        if not use_dex:
+            log.warning(
+                "fetch_mc_usd: pump miss; emergency Dex fallback ca=%s…", ca[:12]
+            )
+            use_dex = True
     if use_dex:
         return _fetch_dex_mc(ca, chain=chain_n if is_evm else None, timeout_s=timeout_s)
     return None

@@ -509,3 +509,43 @@ def test_watch_dip_quality_blocks_clone_farm():
         },
     )
     assert has_watch_dip_quality_evidence(farm) is False
+
+
+def _failed_quote(*_a: Any, **_k: Any) -> dict[str, Any]:
+    return {"ok": False, "mint": SCAT_CA, "errors": ["pump:HTTP404", "dex:no_pairs"], "stale": True}
+
+
+def test_list_mc_fallback_uses_same_cycle_pump_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("XINTEL_SKIP_ENRICH", raising=False)
+    bus = DiscoveryBus(store_path=tmp_path / "bus.json")
+    ev = DiscoveryEvent(
+        source="pumpfun_curve",
+        discovered_at=datetime.now(timezone.utc),
+        chain="solana",
+        ca=SCAT_CA,
+        ticker="SCAT",
+        mc_usd=42_000.0,
+    )
+    rec, _ = bus.upsert(ev)
+    with patch("x_intel.discovery.enrich.quote_mint", side_effect=_failed_quote):
+        out = enrich_record(rec, force=True)
+    assert out.mc_usd == 42_000.0
+    assert out.discovery_latency_features["mc_source"] == "pump.fun_list"
+    assert out.discovery_latency_features["enrich_ok"] is True
+
+
+def test_list_mc_fallback_ignores_old_mc(monkeypatch: pytest.MonkeyPatch):
+    """rec.mc_usd from an older cycle must never be re-stamped as a fresh quote."""
+    monkeypatch.delenv("XINTEL_SKIP_ENRICH", raising=False)
+    rec = _rec(ca=SCAT_CA, mc_usd=99_000.0, ticker="SCAT")
+    rec.first_source = "pumpfun_curve"
+    old = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    rec.discovery_latency_features = {
+        "last_event_mc_usd": 99_000.0,
+        "last_event_mc_source": "pumpfun_curve",
+        "last_event_mc_at": old,
+    }
+    with patch("x_intel.discovery.enrich.quote_mint", side_effect=_failed_quote):
+        out = enrich_record(rec, force=True)
+    assert out.discovery_latency_features["enrich_ok"] is False
+    assert out.confidence_hints.get("mc_source") == "enrich_failed"
