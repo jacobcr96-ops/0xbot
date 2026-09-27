@@ -1,0 +1,165 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "0799a326-9651-4713-84b0-1c4a71722652",
+  "action": "BUY",
+  "issued_at": "2026-09-27T19:25:58.700091Z",
+  "expires_at": "2026-09-27T19:45:58.700091Z",
+  "contract_address": "EKtmPPLaCbEEKiwoHHtV7TsRsmPXs5CMGtQtZFSiinsc",
+  "chain": "solana",
+  "ticker": "STAMP",
+  "confidence": 0.55,
+  "thesis": "watch_dip STAMP live_mc~$321k (first_sight~$2.85M, min_seen~$321k); organic_x CA mentions cleared (GrainneGlenny + VantageAlpha_1 RT); dip-buy \u2264$2M policy",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 0.75,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 321139.6515375662,
+    "price_usd": 0.0028,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-27T19:27:41.953110Z",
+    "source": "jupiter"
+  },
+  "evidence": [
+    {
+      "channel": "x_social",
+      "summary": "ZEC/privacy heat hitch; Grok Bot WATCH (mid-cap + dumping)",
+      "observed_at": "2026-09-20T19:30:26Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "narrative",
+      "summary": "6/10 privacy meta rider, late/exhaustion risk; watch only",
+      "observed_at": "2026-09-20T19:30:26Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "MC ~$2.8\u20132.9M; top liq ~$200k PumpSwap/ZEC + ~$290k Meteora/SOL; ~$5.7M vol; 5m \u221226% to \u221229%; pair age hours",
+      "observed_at": "2026-09-20T19:30:26Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "onchain_flow",
+      "summary": "Pump.fun create ~11:25 PT \u2192 PumpSwap grad ~11:44 PT; Token-2022 mint/freeze revoked. Creator 26oK69\u2026 serial Pump deployer (5+ prior low-MC). Rugcheck insiders 8 (2\u00d74 transfer clusters). Liq STAMP/ZEC ~$174k + STAMP/SOL ~$135k; thin satellites. Full early-buyer list RPC-limited. Flow: WATCH \u2014 serial deployer + insider graph risk; no escalate.",
+      "observed_at": "2026-09-20T19:31:00Z",
+      "refs": [],
+      "weight": 0.7
+    },
+    {
+      "channel": "cross_source",
+      "summary": "Outcome refresh ~14m: PumpSwap price $0.002589 MC ~$2.57M (vs first-sight $0.0028/~$2.85M); ret_15m=-7.54%; still WATCH \u2014 late TG PnL spam (@solearlycatch24 212x claim) not escalate",
+      "observed_at": "2026-09-20T19:44:50Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "cross_source",
+      "summary": "Outcome refresh ~19m: PumpSwap price $0.002596 MC ~$2.57M (vs first-sight $0.0028/~$2.85M); ret\u2248\u22127.3%; 5m chg +14% bounce but still mid-cap dump/recovery chop; TG PnL spam ongoing \u2014 stay WATCH no escalate",
+      "observed_at": "2026-09-20T19:49:30Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "cross_source",
+      "summary": "Outcome refresh ~23m: PumpSwap price $0.003005 MC ~$2.98M (vs first-sight $0.0028/~$2.85M); ret\u2248+7.3%; 5m +16.5% / 1h +43.7% bounce but TG PnL spam (#bbvipks4 / DM funnels) + serial-deployer risk \u2014 stay WATCH no escalate",
+      "observed_at": "2026-09-20T19:53:30Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "cross_source",
+      "summary": "PumpSwap MC~$2,096,879 price~$0.002116 ret_vs_first=-26.4%; m5\u221216%/h1\u221229% cool-off; TG PnL spam ongoing",
+      "observed_at": "2026-09-20T20:00:30Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "cross_source",
+      "summary": "Outcome refresh ~36m: PumpSwap MC~$1,357,813 price~$0.00137 ret_vs_first=-51.1%; m5 \u221229%/h1 \u221269% hard dump; TG PnL spam ongoing \u2014 stay WATCH no escalate",
+      "observed_at": "2026-09-20T20:07:05Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "cross_source",
+      "summary": "Outcome refresh ~44m: PumpSwap MC~$2,041,734 price~$0.002061 ret_vs_first=-26.4%; m5 +27%/h1 +31% bounce off \u221251% drawdown; TG PnL spam + serial deployer \u2014 stay WATCH no escalate",
+      "observed_at": "2026-09-20T20:14:30Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "cross_source",
+      "summary": "Outcome refresh ~59m: pumpswap MC~$2,415,174 price~$0.002438 ret_vs_first=-12.9%; m5 30.22%/h1 15.17%; TG PnL spam ongoing \u2014 stay WATCH no escalate",
+      "observed_at": "2026-09-20T20:30:10Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "cross_source",
+      "summary": "Outcome refresh ~64m: pumpswap MC~$2,415,155 price~$0.002438 ret_vs_first=-12.9%; m5 5.49%/h1 6.4%; TG PnL spam ongoing \u2014 stay WATCH no escalate",
+      "observed_at": "2026-09-20T20:34:42Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "cross_source",
+      "summary": "Outcome refresh ~70m: pumpswap MC~$2,040,307 price~$0.002059 ret_vs_first=-26.5%; m5 \u22126.99%/h1 \u221221.5%; TG PnL spam ongoing \u2014 stay WATCH no escalate",
+      "observed_at": "2026-09-20T20:40:30Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "cross_source",
+      "summary": "Outcome refresh ~13:47 PT: PumpSwap price $0.001888 MC ~$1,870,625 (vs first-sight $0.0028/~$2,850,000); ret_vs_first \u2248 -32.6%; m5 +1.7% / h1 \u221220.4%; still WATCH \u2014 cool-off + TG spam context; no escalate",
+      "observed_at": "2026-09-20T20:48:35Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "PumpSwap MC ~$2.28M liq~$189914 vol_h1~$849653; m5 +7.3% / h1 \u22129.2%; ret_vs_first -20.0%",
+      "observed_at": "2026-09-20T20:56:12Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "cross_source",
+      "summary": "Outcome refresh ~13:59 PT: PumpSwap price $0.002226 MC ~$2,205,919 (vs first-sight $0.0028/~$2.85M); ret_vs_first \u2248 -20.5%; m5 -3.7% / h1 +10.8%; TG PnL spam + serial deployer \u2014 stay WATCH no escalate",
+      "observed_at": "2026-09-20T21:02:43Z",
+      "refs": [],
+      "weight": null
+    },
+    {
+      "channel": "x_social",
+      "summary": "organic_x CA mentions (2 matching posts <6h); gate organic_x=true",
+      "observed_at": "2026-09-27T19:27:41Z",
+      "refs": [
+        "https://x.com/GrainneGlenny/status/2104280566728458739",
+        "https://x.com/VantageAlpha_1/status/2104273867048882218"
+      ],
+      "weight": 0.7
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "watch_dip_buy",
+    "watch_dip"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "20e95639-c11e-4931-8ee8-68beadaef0ae",
+  "do_not_execute_until_armed": false,
+  "quality": {
+    "organic_x": true,
+    "jacob_ping": true,
+    "path": "watch_dip+organic_x"
+  }
+}
