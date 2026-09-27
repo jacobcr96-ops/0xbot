@@ -192,3 +192,32 @@ def evm_dex_cooldown_sec() -> float:
         return max(300.0, float(raw))
     except ValueError:
         return 45 * 60.0
+
+
+def _env_float(name: str, default: float, *, minimum: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(minimum, float(raw))
+    except ValueError:
+        return default
+
+
+def max_ingest_per_cycle() -> int:
+    """Per-cycle cap on ingested discovery events (``XINTEL_MAX_INGEST_PER_CYCLE``).
+
+    Enrich costs ~1s/mint, so an uncapped post-outage backlog can stall a cycle
+    for many minutes. Remainder is carried forward via the pump cursor backlog.
+    """
+    return int(_env_float("XINTEL_MAX_INGEST_PER_CYCLE", 150.0, minimum=1.0))
+
+
+def ingest_budget_sec() -> float:
+    """Wall-clock budget (from cycle start) after which ingest stops (``XINTEL_INGEST_BUDGET_SEC``)."""
+    return _env_float("XINTEL_INGEST_BUDGET_SEC", 200.0, minimum=5.0)
+
+
+def ingest_stale_skip_sec() -> float:
+    """When over the cap, backlog mints older than this are skipped (``XINTEL_INGEST_STALE_SKIP_SEC``)."""
+    return _env_float("XINTEL_INGEST_STALE_SKIP_SEC", 30 * 60.0, minimum=60.0)

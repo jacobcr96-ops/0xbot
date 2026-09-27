@@ -11,7 +11,7 @@ import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -30,6 +30,12 @@ MAX_PAGES = 20  # 1000 coins ≈ ~40 min at current velocity
 COLD_START_LOOKBACK_MS = 45 * 60 * 1000  # 45 minutes
 # Assumed max scan interval for miss_risk (scanner target ≤5 min).
 ASSUMED_SCAN_INTERVAL_MS = 5 * 60 * 1000
+# Carry-forward backlog (events polled but not ingested due to per-cycle cap /
+# wall-clock budget). Stored in pump_cursor.json under BACKLOG_KEY; the
+# watermark still advances to the newest mint so pagination stays bounded.
+BACKLOG_KEY = "backlog"
+BACKLOG_MAX_AGE_MS = 2 * 60 * 60 * 1000  # hard prune; runner skips stale sooner
+BACKLOG_MAX_ROWS = 3000
 
 
 class PumpfunCurveSource:
@@ -56,14 +62,111 @@ class PumpfunCurveSource:
         self.max_pages = int(max_pages)
         self.cold_start_lookback_ms = int(cold_start_lookback_ms)
 
+    # Runner uses this to know the source can carry un-ingested events forward.
+    supports_backlog = True
+
     def poll(self) -> list[DiscoveryEvent]:
         if not self.live:
-            return self._poll_fixture()
-        try:
-            return self._poll_live()
-        except Exception as e:  # noqa: BLE001
-            log.warning("pumpfun_curve live poll failed: %s — no fixture fallback in live mode", e)
+            events = self._poll_fixture()
+        else:
+            try:
+                events = self._poll_live()
+            except Exception as e:  # noqa: BLE001
+                log.warning(
+                    "pumpfun_curve live poll failed: %s — no fixture fallback in live mode", e
+                )
+                events = []
+        return self._merge_backlog(events)
+
+    # ── carry-forward backlog ────────────────────────────────────────────
+    def _backlog_enabled(self) -> bool:
+        # Fixture mode without an explicit data dir must never touch repo data/.
+        return bool(self.live or self._data_dir or self._cursor_path_override)
+
+    def _load_cursor(self) -> dict[str, Any]:
+        raw = atomic_read_json(self._cursor_path())
+        return raw if isinstance(raw, dict) else {}
+
+    def load_backlog(self) -> list[DiscoveryEvent]:
+        """Deferred events from prior cycles (pruned by BACKLOG_MAX_AGE_MS)."""
+        if not self._backlog_enabled():
             return []
+        rows = self._load_cursor().get(BACKLOG_KEY) or []
+        now = datetime.now(timezone.utc)
+        out: list[DiscoveryEvent] = []
+        for r in rows if isinstance(rows, list) else []:
+            if not isinstance(r, dict):
+                continue
+            try:
+                ev = DiscoveryEvent.model_validate(r)
+            except Exception:  # noqa: BLE001 — corrupt row: drop
+                continue
+            if _event_age_ms(ev, now=now) > BACKLOG_MAX_AGE_MS:
+                continue
+            out.append(ev)
+        return out
+
+    def _merge_backlog(self, events: list[DiscoveryEvent]) -> list[DiscoveryEvent]:
+        backlog = self.load_backlog()
+        if not backlog:
+            return events
+        seen = {e.ca for e in events}
+        added = 0
+        for ev in backlog:
+            if ev.ca in seen:
+                continue
+            seen.add(ev.ca)
+            hints = dict(ev.confidence_hints or {})
+            hints["pump_backlog"] = True
+            events.append(ev.model_copy(update={"confidence_hints": hints}))
+            added += 1
+        log.info("pumpfun_curve backlog carried forward → +%d events", added)
+        return events
+
+    def defer_events(
+        self,
+        remaining: Iterable[DiscoveryEvent],
+        *,
+        consumed: Iterable[str] = (),
+    ) -> int:
+        """Persist un-ingested events for the next cycle.
+
+        backlog' = (backlog − consumed) ∪ remaining. Merging (rather than
+        replacing) keeps prior backlog intact if this cycle's poll failed.
+        Returns backlog size after write.
+        """
+        if not self._backlog_enabled():
+            return 0
+        consumed_set = {c for c in consumed if c}
+        cur = self._load_cursor()
+        prior_rows = cur.get(BACKLOG_KEY) or []
+        by_ca: dict[str, DiscoveryEvent] = {}
+        for ev in self.load_backlog():
+            if ev.ca not in consumed_set:
+                by_ca[ev.ca] = ev
+        for ev in remaining:
+            if ev.ca in consumed_set:
+                continue
+            hints = dict(ev.confidence_hints or {})
+            hints.pop("pump_backlog", None)
+            by_ca[ev.ca] = ev.model_copy(update={"confidence_hints": hints})
+        now = datetime.now(timezone.utc)
+        kept = sorted(by_ca.values(), key=lambda e: _event_age_ms(e, now=now))
+        dropped_overflow = max(0, len(kept) - BACKLOG_MAX_ROWS)
+        if dropped_overflow:
+            log.warning(
+                "pumpfun_curve backlog overflow: dropping %d oldest (max=%d)",
+                dropped_overflow,
+                BACKLOG_MAX_ROWS,
+            )
+            kept = kept[:BACKLOG_MAX_ROWS]
+        if not kept and not prior_rows:
+            return 0
+        cur[BACKLOG_KEY] = [e.model_dump(mode="json") for e in kept]
+        cur["backlog_n"] = len(kept)
+        cur["backlog_updated_at"] = now.isoformat()
+        atomic_write_json(self._cursor_path(), cur)
+        return len(kept)
 
     def _fixture_path(self) -> Optional[Path]:
         if self.fixture_dir:
@@ -133,6 +236,11 @@ class PumpfunCurveSource:
         }
         if meta:
             payload.update(meta)
+        # Preserve carry-forward backlog across watermark advances.
+        prior = self._load_cursor()
+        for k in (BACKLOG_KEY, "backlog_n", "backlog_updated_at"):
+            if k in prior:
+                payload[k] = prior[k]
         atomic_write_json(self._cursor_path(), payload)
 
     def _fetch_coins_page(self, offset: int, limit: int) -> list[dict[str, Any]]:
@@ -371,6 +479,16 @@ class PumpfunCurveSource:
             event_kind=r.get("event_kind") or "curve_new",
             confidence_hints=dict(r.get("confidence_hints") or {"pump_curve": True}),
         )
+
+
+def _event_age_ms(ev: DiscoveryEvent, *, now: datetime) -> float:
+    """Age by pair/mint creation (fallback discovered_at); unknown → 0 (fresh)."""
+    ref = ev.pair_created_at or ev.discovered_at
+    if ref is None:
+        return 0.0
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    return max(0.0, (now - ref).total_seconds() * 1000.0)
 
 
 def _created_timestamp_ms(v: Any) -> Optional[int]:
