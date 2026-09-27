@@ -170,10 +170,64 @@ Module: `x_intel/discovery/watch_escalate.py` (wired in `runner.run_cycle` after
 | Dip BUY | `mc_now ≤ $2M` AND (`first_sight` null OR `mc_now ≤ 0.85 × first_sight`) |
 | Reclaim BUY | `min_mc_seen < $2M` AND `mc_now < min(first_sight×1.1, $3.5M)` once |
 | No chase | `mc_now ≥ $4M` and never bought |
-| Stale watch | refresh age `> 600s` |
+| Stale watch | refresh age `> 600s` **and** buyable (last MC ≥ `XINTEL_WATCH_BUY_MIN_MC`, or unknown) — see below |
 | Flag | `watch_dip_buy` on real BUY (no shadow/calibration) |
 
 Solana preferred; skip hard-rugged / name-parasite clones. Persist `mc_usd_now`, `min_mc_usd_seen`, `refreshed_at`.
+
+### Watch freshness: buyable-only stale alert
+
+Sub-floor WATCHes (last known MC < `XINTEL_WATCH_BUY_MIN_MC`, default $25k) can
+never trigger a BUY, so they never alert. They are still refreshed every cycle
+(after the buyable ones) and reported separately.
+
+`data/health/watch_freshness.json` (written by `refresh_open_watches`):
+
+| Field | Meaning |
+|-------|---------|
+| `watch_stale_count` / `stale` / `stale_buyable` | buyable WATCHes with refresh age > 600s (**alerting count**) |
+| `stale_subfloor` | sub-floor WATCHes with refresh age > 600s (report only, never alert) |
+| `stale_total` | all WATCHes with refresh age > 600s |
+| `stale_watch_alert` | `stale_buyable > 0` |
+| `oldest_watch_refresh_age_sec` | oldest refresh age among **buyable** WATCHes |
+| `oldest_watch_refresh_age_sec_all` | oldest refresh age among all open WATCHes |
+| `watch_buyable_count` / `watch_subfloor_count` / `watch_buy_min_mc_usd` | split + floor used |
+| `jup_errors` / `jup_stats` | unrecovered Jupiter errors; 429 retry stats (`http429`, `retries`, `wait_sec`, `recovered`, `gave_up`, `unanswered`) |
+| `watches[].stale` | buyable-only stale flag (what the watchdog lists) |
+| `watches[].refresh_stale` / `buyable` / `subfloor` | raw age flag + classification |
+
+`data/health/heartbeat.json` mirrors: `watch_stale_count` (buyable-only),
+`watch_stale_buyable`, `watch_stale_subfloor`, `stale_watch_alert`,
+`oldest_watch_refresh_age_sec` (buyable-only), `oldest_watch_refresh_age_sec_all`,
+`watch_jup_stats`, `watch_jup_errors`.
+
+**Scan / watchdog routines:** decide the stale-watch alert from heartbeat
+`stale_watch_alert` (or `watch_stale_buyable > 0`), and list offenders from
+`watch_freshness.json` rows with `stale: true`. Never compute staleness from
+`refresh_age_sec` alone or from `stale_total` / `stale_subfloor` /
+`oldest_watch_refresh_age_sec_all` — those include dead sub-floor coins.
+
+### Jupiter 429 handling (watch MC quotes)
+
+`fetch_jup_assets` (datapi batch): on HTTP 429 it waits
+`max(Retry-After, backoff)` — `Retry-After` is delta-seconds or HTTP-date and is
+never undercut; backoff is exponential with jitter (0.75s, 1.5s + ≤0.5s jitter),
+needed because datapi answers 429 with `Retry-After: 0`; at most 3 tries within a 10s budget; each retry
+halves the failed batch (min 5). A `Retry-After` > 5s or beyond the budget gives
+up immediately and sets a process-local cooldown so per-mint enrich quotes skip
+Jupiter (they never retry — bounded ingest latency). Watch refresh orders mints
+buyable-first (highest MC first) so STAMP/OURA/IOF/USOS-class coins get quoted
+before dead ones; pump.fun → Dex emergency fallback covers the rest.
+
+### Dead-coin close during a Jupiter outage
+
+Buyable WATCHes: a Jupiter outage/429 never counts toward the dead streak.
+Sub-floor WATCHes: when Jupiter did not answer **and** pump.fun returns no MC
+**and** Dex answered with no usable pair, the refresh counts as
+`no_mc_all_sources` (a Dex error/429 is an outage and does not count); 3 consecutive
+refreshes (`WATCH_DEAD_NULL_STREAK`, runner refreshes twice per cycle) close
+the WATCH as `expired_stale` (`dead_coin_no_mc_all_sources … mc_below_floor`).
+Any successful quote resets the streak.
 
 ## Organic X (Jacob ping)
 

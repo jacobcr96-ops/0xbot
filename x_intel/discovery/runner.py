@@ -117,8 +117,14 @@ def _refresh_watches_only(*, ledger: CandidateLedger, root: Path, live: bool) ->
     return {
         "watch_count": fresh.get("watch_count"),
         "watch_stale_count": fresh.get("watch_stale_count"),
+        "watch_stale_buyable": fresh.get("stale_buyable"),
+        "watch_stale_subfloor": fresh.get("stale_subfloor"),
+        "stale_watch_alert": fresh.get("stale_watch_alert"),
         "watch_expired_n": fresh.get("watch_expired_n"),
         "oldest_watch_refresh_age_sec": fresh.get("oldest_watch_refresh_age_sec"),
+        "oldest_watch_refresh_age_sec_all": fresh.get("oldest_watch_refresh_age_sec_all"),
+        "jup_errors": fresh.get("jup_errors"),
+        "jup_stats": fresh.get("jup_stats"),
     }
 
 
@@ -413,6 +419,21 @@ def _write_cycle_heartbeat(
         raw["oldest_watch_refresh_age_sec"] = watch_summary.get(
             "oldest_watch_refresh_age_sec", raw.get("oldest_watch_refresh_age_sec")
         )
+        # Buyable-only staleness (see watch_escalate); sub-floor reported apart.
+        for k in (
+            "watch_stale_buyable",
+            "watch_stale_subfloor",
+            "stale_watch_alert",
+            "oldest_watch_refresh_age_sec_all",
+        ):
+            if k in watch_summary:
+                raw[k] = watch_summary.get(k)
+        if "watch_stale_buyable" not in watch_summary and "watch_stale_count" in watch_summary:
+            raw["watch_stale_buyable"] = watch_summary.get("watch_stale_count")
+            raw["stale_watch_alert"] = bool(watch_summary.get("watch_stale_count"))
+        if "jup_stats" in watch_summary:
+            raw["watch_jup_stats"] = watch_summary.get("jup_stats")
+            raw["watch_jup_errors"] = watch_summary.get("jup_errors")
     if ingest_stats:
         raw["ingest"] = dict(ingest_stats)
         raw["cycle_duration_sec"] = ingest_stats.get("cycle_duration_sec")

@@ -19,8 +19,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import re
+import time
+from collections import deque
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -38,6 +42,26 @@ UA = "x-intel-discovery/0.2"
 PUMPFUN_COIN_URL = "https://frontend-api-v3.pump.fun/coins/{mint}"
 JUP_ASSETS_URL = "https://datapi.jup.ag/v1/assets/search?query={q}"
 JUP_BATCH_MAX = 50
+# 429 handling (bounded): up to JUP_MAX_TRIES attempts per fetch_jup_assets call
+# within JUP_RETRY_BUDGET_SEC wall clock; Retry-After respected (a Retry-After
+# longer than the remaining budget / JUP_RETRY_AFTER_MAX gives up instead of
+# hammering); otherwise exponential backoff with jitter. Each retry halves the
+# failed batch (never below JUP_RETRY_MIN_BATCH) so callers that order mints
+# by priority get the important ones through first.
+JUP_MAX_TRIES = 3
+JUP_RETRY_BUDGET_SEC = 10.0
+JUP_BACKOFF_BASE_SEC = 0.75
+JUP_BACKOFF_JITTER_SEC = 0.5
+JUP_RETRY_AFTER_MAX = 5.0
+JUP_RETRY_MIN_BATCH = 5
+JUP_COOLDOWN_DEFAULT_SEC = 20.0
+# Process-local cooldown after an unrecovered 429 (so per-mint enrich quotes
+# don't keep hammering a rate-limited datapi for the rest of the cycle).
+_JUP_COOLDOWN_UNTIL = 0.0
+# Stats of the most recent fetch_jup_assets call (for health files / tests).
+JUP_LAST_STATS: dict[str, Any] = {}
+_sleep = time.sleep
+_monotonic = time.monotonic
 # A quote whose last on-chain price update is older than this is not "live".
 PRICE_LIVE_MAX_AGE_SEC = 24 * 3600
 DEX_TOKEN_URL = "https://api.dexscreener.com/latest/dex/tokens/{mint}"
@@ -131,38 +155,192 @@ def _parse_iso(v: Any) -> Optional[datetime]:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
+def _parse_retry_after(headers: Any) -> Optional[float]:
+    """Retry-After header → seconds (delta-seconds or HTTP-date); None if absent/bad."""
+    if headers is None:
+        return None
+    try:
+        raw = headers.get("Retry-After")
+    except Exception:  # noqa: BLE001
+        return None
+    if raw is None:
+        return None
+    raw = str(raw).strip()
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        pass
+    try:
+        dt = parsedate_to_datetime(raw)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return max(0.0, (dt - datetime.now(timezone.utc)).total_seconds())
+
+
+def jup_backoff_delay(attempt: int, *, retry_after: Optional[float] = None) -> float:
+    """Delay before retry #attempt (0-based).
+
+    Exponential backoff + jitter, never shorter than Retry-After. (datapi
+    sends ``Retry-After: 0`` on 429, so honouring it literally would just
+    re-hit the limiter three times in ~0.1s.)
+    """
+    backoff = JUP_BACKOFF_BASE_SEC * (2 ** attempt) + random.uniform(0.0, JUP_BACKOFF_JITTER_SEC)
+    if retry_after is not None:
+        return max(float(retry_after), backoff)
+    return backoff
+
+
+def reset_jup_cooldown() -> None:
+    global _JUP_COOLDOWN_UNTIL
+    _JUP_COOLDOWN_UNTIL = 0.0
+
+
+def jup_cooldown_left() -> float:
+    return max(0.0, _JUP_COOLDOWN_UNTIL - _monotonic())
+
+
 def fetch_jup_assets(
     mints: list[str],
     *,
     timeout: float = 10.0,
+    max_tries: int = JUP_MAX_TRIES,
+    retry_budget_sec: float = JUP_RETRY_BUDGET_SEC,
 ) -> tuple[dict[str, dict[str, Any]], list[str]]:
     """Batch Jupiter datapi asset lookup. Returns ({mint: asset}, errors).
 
-    Only exact id matches are kept (the endpoint is a search API).
+    Only exact id matches are kept (the endpoint is a search API). Mints are
+    queried in the given order (callers put the most important first).
+
+    HTTP 429: respect Retry-After, else exponential backoff + jitter; at most
+    ``max_tries`` attempts in total and never beyond ``retry_budget_sec`` of
+    wall clock; each retry halves the failed batch. ``errors`` only lists
+    failures that were NOT recovered (a 429 that succeeded on retry is
+    reported in ``JUP_LAST_STATS`` instead), so callers can keep treating a
+    non-empty error list as "Jupiter did not answer for every mint".
     """
+    global _JUP_COOLDOWN_UNTIL
     want = [m.strip() for m in mints if m and m.strip() and not looks_like_evm_ca(m)]
     out: dict[str, dict[str, Any]] = {}
     errors: list[str] = []
-    for i in range(0, len(want), JUP_BATCH_MAX):
-        chunk = want[i : i + JUP_BATCH_MAX]
+    stats: dict[str, Any] = {
+        "mints": len(want),
+        "requests": 0,
+        "http429": 0,
+        "retries": 0,
+        "wait_sec": 0.0,
+        "retry_after": [],
+        "recovered": False,
+        "gave_up": False,
+        "unanswered": 0,
+    }
+    JUP_LAST_STATS.clear()
+    JUP_LAST_STATS.update(stats)
+    if not want:
+        return out, errors
+    t0 = _monotonic()
+    deadline = t0 + max(0.0, float(retry_budget_sec))
+    tries_left = max(1, int(max_tries))
+
+    # Cooldown from a previous unrecovered 429 in this process: the per-mint
+    # enrich path (max_tries=1) skips Jupiter while it lasts; priority batch
+    # callers (watch refresh, max_tries>1) still try with their own bounded
+    # backoff so a per-mint 429 never blinds the watch refresh.
+    if tries_left <= 1 and jup_cooldown_left() > 0:
+        stats["gave_up"] = True
+        stats["unanswered"] = len(want)
+        stats["cooldown"] = True
+        JUP_LAST_STATS.update(stats)
+        return out, ["jup:HTTP429_cooldown"]
+
+    queue: deque[list[str]] = deque(
+        want[i : i + JUP_BATCH_MAX] for i in range(0, len(want), JUP_BATCH_MAX)
+    )
+    retries_used = 0
+    while queue:
+        chunk = queue.popleft()
         url = JUP_ASSETS_URL.format(q=",".join(chunk))
+        remaining = deadline - _monotonic()
+        req_timeout = timeout if retries_used == 0 else max(1.0, min(timeout, remaining))
+        stats["requests"] += 1
         try:
-            d = _http_get_json(url, timeout=timeout)
+            d = _http_get_json(url, timeout=req_timeout)
         except HTTPError as e:
-            errors.append(f"jup:HTTP{e.code}")
             if e.code == 429:
+                stats["http429"] += 1
+                ra = _parse_retry_after(getattr(e, "headers", None))
+                if ra is not None:
+                    stats["retry_after"].append(ra)
+                delay = jup_backoff_delay(retries_used, retry_after=ra)
+                remaining = deadline - _monotonic()
+                can_retry = (
+                    retries_used + 1 < tries_left
+                    and delay <= remaining
+                    and (ra is None or ra <= JUP_RETRY_AFTER_MAX)
+                )
+                if can_retry:
+                    _sleep(delay)
+                    stats["wait_sec"] += delay
+                    retries_used += 1
+                    stats["retries"] = retries_used
+                    # Smaller batch on retry; keep priority order (first half first).
+                    if len(chunk) > JUP_RETRY_MIN_BATCH:
+                        half = max(JUP_RETRY_MIN_BATCH, (len(chunk) + 1) // 2)
+                        queue.appendleft(chunk[half:])
+                        queue.appendleft(chunk[:half])
+                    else:
+                        queue.appendleft(chunk)
+                    log.info(
+                        "jupiter 429: retry %d/%d in %.2fs (retry_after=%s) batch=%d",
+                        retries_used,
+                        tries_left - 1,
+                        delay,
+                        ra,
+                        len(queue[0]),
+                    )
+                    continue
+                # Give up: rest of the mints stay unanswered this call.
+                errors.append("jup:HTTP429")
+                stats["gave_up"] = True
+                stats["unanswered"] = len(chunk) + sum(len(c) for c in queue)
+                # Retry-After: 0 is no real hint → default cooldown.
+                _JUP_COOLDOWN_UNTIL = _monotonic() + (
+                    ra if ra else JUP_COOLDOWN_DEFAULT_SEC
+                )
+                # per-mint enrich path (max_tries=1) is noisy: info; batch: warning
+                log.log(
+                    logging.WARNING if tries_left > 1 else logging.INFO,
+                    "jupiter 429: giving up after %d tries (%.1fs, retry_after=%s); %d mints unanswered",
+                    stats["requests"],
+                    _monotonic() - t0,
+                    ra,
+                    stats["unanswered"],
+                )
                 break
+            errors.append(f"jup:HTTP{e.code}")
+            stats["unanswered"] += len(chunk)
             continue
         except (URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as e:
             errors.append(f"jup:{type(e).__name__}")
+            stats["unanswered"] += len(chunk)
             continue
         if not isinstance(d, list):
             errors.append("jup:bad_payload")
+            stats["unanswered"] += len(chunk)
             continue
         wanted = set(chunk)
         for a in d:
             if isinstance(a, dict) and a.get("id") in wanted:
                 out[str(a["id"])] = a
+    stats["recovered"] = stats["http429"] > 0 and not stats["gave_up"]
+    stats["wait_sec"] = round(stats["wait_sec"], 3)
+    stats["elapsed_sec"] = round(_monotonic() - t0, 3)
+    JUP_LAST_STATS.update(stats)
     return out, errors
 
 
@@ -216,7 +394,9 @@ def quote_from_jup_asset(
 
 
 def _fetch_jup_quote(mint: str, *, timeout: float) -> tuple[Optional[dict[str, Any]], list[str]]:
-    assets, errs = fetch_jup_assets([mint], timeout=timeout)
+    # Per-mint path runs for every ingested mint: no 429 retries here (bounded
+    # latency); an unrecovered 429 sets a cooldown so later mints skip Jupiter.
+    assets, errs = fetch_jup_assets([mint], timeout=timeout, max_tries=1)
     a = assets.get(mint)
     if a is None:
         return None, errs or ["jup:not_found"]
@@ -850,6 +1030,9 @@ __all__ = [
     "skip_enrich",
     "skip_jup",
     "fetch_jup_assets",
+    "jup_backoff_delay",
+    "reset_jup_cooldown",
+    "JUP_LAST_STATS",
     "quote_from_jup_asset",
     "PRICE_LIVE_MAX_AGE_SEC",
     "EARLY_MC_SECONDARY_USD",

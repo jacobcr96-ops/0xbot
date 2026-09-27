@@ -75,7 +75,7 @@ data/           # candidates, outcomes, decisions/ queue, execution_reports/
 
 ### WATCH dip-buy (`watch_dip_buy`)
 
-Open `watch` candidates are MC-refreshed each discovery cycle (pump.fun; Dex skipped when `XINTEL_SKIP_DEX=true`). Freshness: `data/health/watch_freshness.json` + heartbeat `watch_count` / `watch_stale_count` / `oldest_watch_refresh_age_sec` (stale >10m).
+Open `watch` candidates are MC-refreshed each discovery cycle (pump.fun; Dex skipped when `XINTEL_SKIP_DEX=true`). Freshness: `data/health/watch_freshness.json` + heartbeat `watch_count` / `watch_stale_count` / `oldest_watch_refresh_age_sec` (stale >10m, **buyable-only**: last MC ≥ `XINTEL_WATCH_BUY_MIN_MC`; sub-floor reported as `stale_subfloor`, never alert — see docs/EARLY_DISCOVERY.md).
 
 If MC dips to **≤$2M** and **≤85% of first-sight** (Solana, not hard-rugged / name-parasite), or reclaim after a sub-$2M print while still under `min(first_sight×1.1, $3.5M)`, emit one real BUY via `emit_pursue_buy` with `risk_flags` including **`watch_dip_buy`** (never `calibration_shadow`). No chase at **≥$4M** if never bought. Dedup one open dip-BUY per CA (re-emit only after TTL expiry). Size ≥0.75% equity, TTL 1200s, `refs=[]`.
 

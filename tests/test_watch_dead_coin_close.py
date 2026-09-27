@@ -144,21 +144,55 @@ def test_null_mc_streak_and_outage_guard(tmp_data: Path):
     stamp = _watch(STAMP, "STAMP", 307_000.0)
     for c in (dead, stamp):
         led.save_candidate(c)
-    # Jupiter batch outage: both miss, but nothing counts toward the streak
+    # Jupiter batch outage: nothing counts toward a buyable WATCH's streak
     for _ in range(4):
         r = _run(led, tmp_data, {}, errs=["jup:http_503"])
-        assert r["watch_expired_n"] == 0
-    assert all(w["dead_streak"] == 0 for w in r["watches"])
-    # Source answers with no MC for both, several refreshes in a row
-    for i in range(2):
+        assert {w["ca"]: w["dead_streak"] for w in r["watches"]}[STAMP] == 0
+    # Source answers with no MC for STAMP several refreshes in a row
+    for _ in range(2):
         r = _run(led, tmp_data, {})
         assert r["watch_expired_n"] == 0
     # A live print resets the streak for STAMP
     r = _run(led, tmp_data, {STAMP: _asset(STAMP, 305_000.0, now, holders=900, liq=60_000.0)})
-    assert [e["ca"] for e in r["expired_this_cycle"]] == [PUMPAY]
-    assert "dead_coin_no_mc" in r["expired_this_cycle"][0]["reason"]
+    assert r["watches"][0]["dead_streak"] == 0
     # STAMP: many consecutive null MC refreshes never close it (real MC ≥ floor)
     for _ in range(6):
         r = _run(led, tmp_data, {})
     assert r["watch_expired_n"] == 0 and [w["ca"] for w in r["watches"]] == [STAMP]
     assert r["watches"][0]["dead_streak"] == 6
+    # PUMPAY (sub-floor) was closed during the outage: all sources failed 3x
+    closed = atomic_read_json(tmp_data / "candidates" / f"{dead.candidate_id}.json")
+    assert closed["decision"] == "reject" and closed["watch_status"] == WATCH_EXPIRED_STATUS
+    assert "dead_coin_no_mc_all_sources streak=3" in closed["watch_close_reason"]
+
+
+def test_subfloor_outage_closes_after_three_all_source_failures(tmp_data: Path):
+    """Jupiter 429 + pump/Dex empty: sub-floor dead coin closes on refresh 3; buyable never."""
+    led = CandidateLedger(RepoPaths(data=tmp_data))
+    dead = _watch(PUMPAY, "NGGR", 3_356.0)
+    stamp = _watch(STAMP, "STAMP", 293_000.0)
+    for c in (dead, stamp):
+        led.save_candidate(c)
+    for i in (1, 2):
+        r = _run(led, tmp_data, {}, errs=["jup:HTTP429"])
+        assert r["watch_expired_n"] == 0
+        streaks = {w["ca"]: (w["dead_signal"], w["dead_streak"]) for w in r["watches"]}
+        assert streaks[PUMPAY] == ("no_mc_all_sources", i)
+        assert streaks[STAMP] == (None, 0)
+    r = _run(led, tmp_data, {}, errs=["jup:HTTP429"])
+    assert [e["ca"] for e in r["expired_this_cycle"]] == [PUMPAY]
+    assert "mc_below_floor" in r["expired_this_cycle"][0]["reason"]
+    assert [w["ca"] for w in r["watches"]] == [STAMP]
+
+
+def test_subfloor_streak_resets_when_a_source_quotes_it(tmp_data: Path):
+    led = CandidateLedger(RepoPaths(data=tmp_data))
+    now = datetime.now(timezone.utc)
+    sub = _watch(SUBFLOOR_LIVE, "SUB", 3_400.0)
+    led.save_candidate(sub)
+    for _ in range(2):
+        _run(led, tmp_data, {}, errs=["jup:HTTP429"])
+    r = _run(led, tmp_data, {SUBFLOOR_LIVE: _asset(SUBFLOOR_LIVE, 3_300.0, now, holders=40, liq=5_000.0)})
+    assert r["watch_expired_n"] == 0 and r["watches"][0]["dead_streak"] == 0
+    r = _run(led, tmp_data, {}, errs=["jup:HTTP429"])
+    assert r["watch_expired_n"] == 0 and r["watches"][0]["dead_streak"] == 1

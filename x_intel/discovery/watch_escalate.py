@@ -24,9 +24,18 @@ expired_stale when the live source repeatedly reports a dead coin —
 LAST_PRINT (Jupiter print >24h old, no trades) for WATCH_DEAD_LAST_PRINT_STREAK
 consecutive refreshes, or no MC at all for WATCH_DEAD_NULL_STREAK consecutive
 refreshes — AND a corroborating dead signal holds: holders <= 1, liquidity ~0,
-or MC below the ``XINTEL_WATCH_BUY_MIN_MC`` floor. A single failed fetch (or a
-Jupiter batch outage) never counts, and coins with real MC/liquidity/holders
-are never closed by this path.
+or MC below the ``XINTEL_WATCH_BUY_MIN_MC`` floor. A single failed fetch never
+counts, and coins with real MC/liquidity/holders are never closed by this path.
+A Jupiter batch outage (e.g. HTTP 429) never counts for a buyable WATCH (last
+known MC >= floor); for a sub-floor WATCH, "no MC from every source" (Jupiter
+unanswered + pump.fun empty + Dex *answered* with no usable pair) counts as
+``no_mc_all_sources`` and closes after WATCH_DEAD_NULL_STREAK consecutive
+refreshes. If Dex also errors (429/network) it is an outage and never counts.
+
+Staleness scope: only buyable WATCHes (last known MC >= floor, or MC unknown)
+count toward ``watch_stale_count`` / ``stale_buyable`` / ``stale_watch_alert``
+and per-row ``stale``. Sub-floor WATCHes are still refreshed (buyable ones are
+quoted first) but reported separately as ``stale_subfloor`` and never alert.
 """
 
 from __future__ import annotations
@@ -49,6 +58,7 @@ from x_intel.config import (
     watch_buy_min_mc_usd,
     watch_buy_requires_organic_x,
 )
+from x_intel.discovery import enrich as _enrich
 from x_intel.discovery.enrich import (
     PRICE_LIVE_MAX_AGE_SEC,
     fetch_jup_assets,
@@ -384,11 +394,16 @@ def fetch_mc_quote(
                 "fetch_mc_usd: pump miss; emergency Dex fallback ca=%s…", ca[:12]
             )
             use_dex = True
+    dex_status: dict[str, Any] = {}
     if use_dex:
-        mc = _fetch_dex_mc(ca, chain=chain_n if is_evm else None, timeout_s=timeout_s)
+        mc = _fetch_dex_mc(
+            ca, chain=chain_n if is_evm else None, timeout_s=timeout_s, status=dex_status
+        )
         if mc is not None:
             return {"mc_usd": mc, "source": "dexscreener", "price_updated_at": None, "price_live": True}
-    return {**empty, **jup_meta}
+    # dex_answered: True = Dex replied (no usable pair), False = Dex errored
+    # (429/network — an outage, not evidence of a dead coin), None = unknown.
+    return {**empty, **jup_meta, "dex_answered": dex_status.get("answered")}
 
 
 def fetch_mc_usd(
@@ -428,6 +443,7 @@ def _fetch_dex_mc(
     *,
     chain: Optional[str] = None,
     timeout_s: float,
+    status: Optional[dict[str, Any]] = None,
 ) -> Optional[float]:
     url = DEX_TOKEN_URL.format(ca=ca)
     try:
@@ -436,6 +452,13 @@ def _fetch_dex_mc(
             payload = json.loads(resp.read().decode("utf-8"))
     except Exception as e:  # noqa: BLE001
         log.debug("dex mc fetch failed ca=%s…: %s", ca[:12], e)
+        if status is not None:
+            status["answered"] = False
+            status["error"] = str(e)[:120]
+        return None
+    if status is not None:
+        status["answered"] = True
+    if not isinstance(payload, dict):
         return None
     pairs = payload.get("pairs") or []
     want = (chain or "").lower() if chain and chain not in {"", "solana"} else None
@@ -522,6 +545,7 @@ def _normalize_fetch_result(res: Any) -> dict[str, Any]:
             "price_live": bool(res.get("price_live", mc is not None)),
             "holder_count": res.get("holder_count"),
             "liq_usd": res.get("liq_usd"),
+            "dex_answered": res.get("dex_answered"),
         }
     if res is None:
         return {"mc_usd": None, "source": None, "price_updated_at": None, "price_live": False}
@@ -584,7 +608,7 @@ def evaluate_dead_watch(
     """
     if kind == "last_print":
         need = WATCH_DEAD_LAST_PRINT_STREAK
-    elif kind == "no_mc":
+    elif kind in ("no_mc", "no_mc_all_sources"):
         need = WATCH_DEAD_NULL_STREAK
     else:
         return None
@@ -639,6 +663,32 @@ def _expire_watch(
     return closed
 
 
+def is_buyable_mc(mc: Optional[float], floor: Optional[float] = None) -> bool:
+    """Last known MC >= XINTEL_WATCH_BUY_MIN_MC. Unknown MC counts as buyable
+    (conservative: we cannot prove it is a dead sub-floor coin)."""
+    floor = watch_buy_min_mc_usd() if floor is None else floor
+    m = _fnum(mc)
+    return m is None or m >= floor
+
+
+def order_watches_for_refresh(
+    watches: list[CandidateV1], floor: Optional[float] = None
+) -> list[CandidateV1]:
+    """Buyable WATCHes (MC >= floor) first, highest MC first; then sub-floor.
+
+    Jupiter batches (and 429-retry halves) follow this order, so STAMP/OURA/
+    IOF/USOS-class coins get quoted before $3k dead coins."""
+    floor = watch_buy_min_mc_usd() if floor is None else floor
+
+    def key(c: CandidateV1) -> tuple[int, float]:
+        m = _fnum(get_mc_now(c))
+        if m is None:
+            return (1, 0.0)  # unknown: after known-buyable, before sub-floor
+        return (0, -m) if m >= floor else (2, -m)
+
+    return sorted(watches, key=key)
+
+
 def refresh_open_watches(
     *,
     ledger: Optional[CandidateLedger] = None,
@@ -659,11 +709,16 @@ def refresh_open_watches(
     do_expire = live if expire_stale is None else bool(expire_stale)
     now = _now()
 
-    watches = led.list_candidates(decision=CandidateDecision.watch.value)
+    floor = watch_buy_min_mc_usd()
+    watches = order_watches_for_refresh(
+        led.list_candidates(decision=CandidateDecision.watch.value), floor
+    )
 
-    # One batched Jupiter call for every Solana WATCH (primary MC source).
+    # One batched Jupiter call for every Solana WATCH (primary MC source);
+    # buyable first so a 429 retry with a smaller batch covers them first.
     jup_map: dict[str, dict[str, Any]] = {}
     jup_errors: list[str] = []
+    jup_stats: dict[str, Any] = {}
     if live and mc_fetcher is None and not skip_jup():
         sol = [
             (c.contract_address or "").strip()
@@ -672,15 +727,26 @@ def refresh_open_watches(
             and not (c.contract_address or "").lower().startswith("0x")
         ]
         if sol:
+            _enrich.JUP_LAST_STATS.clear()
             jup_map, jup_errors = fetch_jup_assets(sol, timeout=10.0)
+            jup_stats = dict(_enrich.JUP_LAST_STATS)
             if jup_errors:
-                log.warning("watch refresh: jupiter batch errors=%s", jup_errors)
+                log.warning(
+                    "watch refresh: jupiter batch errors=%s stats=%s", jup_errors, jup_stats
+                )
+            elif jup_stats.get("http429"):
+                log.info("watch refresh: jupiter 429 recovered stats=%s", jup_stats)
 
     rows: list[dict[str, Any]] = []
     expired: list[dict[str, Any]] = []
-    stale_count = 0
-    oldest_age: Optional[float] = None
+    stale_count = 0  # buyable-only (alerting)
+    stale_subfloor = 0
+    stale_total = 0
+    buyable_n = 0
+    oldest_age: Optional[float] = None  # buyable-only
+    oldest_age_all: Optional[float] = None
     source_counts: dict[str, int] = {}
+    jup_outage = bool(mc_fetcher is None and live and jup_errors)
 
     for cand in watches:
         err = None
@@ -714,8 +780,18 @@ def refresh_open_watches(
         if not price_live and err is None:
             if _is_last_print(q, now=now):
                 dead_kind = "last_print"
-            elif mc is None and not (mc_fetcher is None and live and jup_errors):
+            elif mc is None and (not jup_outage or ca in jup_map):
+                # every source answered (Jupiter row had no MC / not indexed)
                 dead_kind = "no_mc"
+            elif (
+                mc is None
+                and q.get("dex_answered") is not False
+                and not is_buyable_mc(get_mc_now(cand), floor)
+            ):
+                # Jupiter unanswered (429/outage) AND pump.fun + Dex fallback
+                # empty for a sub-floor coin: counts (never for buyable ones).
+                # A Dex error (429/network) is an outage too → does not count.
+                dead_kind = "no_mc_all_sources"
         prev_streak = int(_fnum(extra0.get("watch_dead_streak")) or 0)
         streak = prev_streak + 1 if dead_kind else 0
         holders = q.get("holder_count")
@@ -825,19 +901,29 @@ def refresh_open_watches(
             elif dead_updates:
                 cand = _persist_candidate_meta(led, cand, extra_updates=dead_updates)
 
+        last_mc = get_mc_now(cand)
+        buyable = is_buyable_mc(last_mc, floor)
+        if buyable:
+            buyable_n += 1
         age_sec: Optional[float] = None
         if refreshed_at is not None:
             rt = refreshed_at if refreshed_at.tzinfo else refreshed_at.replace(tzinfo=timezone.utc)
             age_sec = max(0.0, (now - rt).total_seconds())
-            if oldest_age is None or age_sec > oldest_age:
-                oldest_age = age_sec
-            if age_sec > WATCH_STALE_SEC:
-                stale_count += 1
+            eff_age = age_sec
         else:
-            stale_count += 1
-            # treat never-refreshed as infinitely old for oldest metric
-            if oldest_age is None or oldest_age < WATCH_STALE_SEC * 10:
-                oldest_age = max(oldest_age or 0.0, float(WATCH_STALE_SEC * 10))
+            # treat never-refreshed as very old for oldest metric
+            eff_age = float(WATCH_STALE_SEC * 10)
+        refresh_stale = age_sec is None or age_sec > WATCH_STALE_SEC
+        if oldest_age_all is None or eff_age > oldest_age_all:
+            oldest_age_all = eff_age
+        if buyable and (oldest_age is None or eff_age > oldest_age):
+            oldest_age = eff_age
+        if refresh_stale:
+            stale_total += 1
+            if buyable:
+                stale_count += 1
+            else:
+                stale_subfloor += 1
 
         rows.append(
             {
@@ -845,14 +931,19 @@ def refresh_open_watches(
                 "ticker": cand.ticker,
                 "ca": cand.contract_address,
                 "chain": cand.chain,
-                "mc_usd_now": get_mc_now(cand),
+                "mc_usd_now": last_mc,
                 "min_mc_usd_seen": get_min_mc_seen(cand),
                 "mc_usd_at_first_sight": cand.mc_usd_at_first_sight,
                 "mc_source": q.get("source") if price_live else None,
                 "price_updated_at": q.get("price_updated_at"),
                 "refreshed_at": (refreshed_at.isoformat() if refreshed_at else None),
                 "refresh_age_sec": age_sec,
-                "stale": age_sec is None or age_sec > WATCH_STALE_SEC,
+                # ``stale`` is buyable-only (what the watchdog alerts on);
+                # ``refresh_stale`` is the raw age check for every WATCH.
+                "stale": refresh_stale and buyable,
+                "refresh_stale": refresh_stale,
+                "buyable": buyable,
+                "subfloor": not buyable,
                 "fetch_error": err,
                 "dead_signal": dead_kind,
                 "dead_streak": streak,
@@ -863,13 +954,24 @@ def refresh_open_watches(
     freshness = {
         "checked_at": now.isoformat(),
         "watch_count": open_n,
+        # Buyable-only staleness (alerting). stale == stale_buyable == watch_stale_count.
         "watch_stale_count": stale_count,
+        "stale": stale_count,
+        "stale_buyable": stale_count,
+        "stale_subfloor": stale_subfloor,
+        "stale_total": stale_total,
+        "stale_watch_alert": stale_count > 0,
+        "watch_buyable_count": buyable_n,
+        "watch_subfloor_count": open_n - buyable_n,
+        "watch_buy_min_mc_usd": floor,
         "oldest_watch_refresh_age_sec": oldest_age,
+        "oldest_watch_refresh_age_sec_all": oldest_age_all,
         "stale_threshold_sec": WATCH_STALE_SEC,
         "expire_threshold_sec": WATCH_EXPIRE_SEC,
         "watch_expired_n": len(expired),
         "mc_source_counts": source_counts,
         "jup_errors": jup_errors,
+        "jup_stats": jup_stats,
         "skip_dex": skip_dex(),
         "armed": is_armed(),
         "watches": rows,
@@ -884,11 +986,14 @@ def refresh_open_watches(
         watch_stale_count=stale_count,
         oldest_watch_refresh_age_sec=oldest_age,
         watch_expired_n=len(expired),
+        watch_stale_subfloor=stale_subfloor,
+        oldest_watch_refresh_age_sec_all=oldest_age_all,
     )
     log.info(
-        "watch refresh n=%d stale=%d expired=%d oldest_age=%s sources=%s",
+        "watch refresh n=%d stale_buyable=%d stale_subfloor=%d expired=%d oldest_age=%s sources=%s",
         open_n,
         stale_count,
+        stale_subfloor,
         len(expired),
         oldest_age,
         source_counts,
@@ -903,12 +1008,19 @@ def _patch_heartbeat(
     watch_stale_count: int,
     oldest_watch_refresh_age_sec: Optional[float],
     watch_expired_n: int = 0,
+    watch_stale_subfloor: int = 0,
+    oldest_watch_refresh_age_sec_all: Optional[float] = None,
 ) -> None:
     raw = atomic_read_json(path) or {}
     raw["watch_count"] = watch_count
     raw["watch_expired_n"] = watch_expired_n
+    # Buyable-only (MC >= XINTEL_WATCH_BUY_MIN_MC); sub-floor never alerts.
     raw["watch_stale_count"] = watch_stale_count
+    raw["watch_stale_buyable"] = watch_stale_count
+    raw["watch_stale_subfloor"] = watch_stale_subfloor
+    raw["stale_watch_alert"] = watch_stale_count > 0
     raw["oldest_watch_refresh_age_sec"] = oldest_watch_refresh_age_sec
+    raw["oldest_watch_refresh_age_sec_all"] = oldest_watch_refresh_age_sec_all
     raw["watch_freshness_checked_at"] = _now().isoformat()
     atomic_write_json(path, raw)
 
@@ -1352,6 +1464,12 @@ def run_watch_escalate_cycle(
     return {
         "watch_count": freshness.get("watch_count"),
         "watch_stale_count": freshness.get("watch_stale_count"),
+        "watch_stale_buyable": freshness.get("stale_buyable"),
+        "watch_stale_subfloor": freshness.get("stale_subfloor"),
+        "stale_watch_alert": freshness.get("stale_watch_alert"),
+        "oldest_watch_refresh_age_sec_all": freshness.get("oldest_watch_refresh_age_sec_all"),
+        "jup_errors": freshness.get("jup_errors"),
+        "jup_stats": freshness.get("jup_stats"),
         "watch_expired_n": freshness.get("watch_expired_n"),
         "expired": freshness.get("expired_this_cycle"),
         "oldest_watch_refresh_age_sec": freshness.get("oldest_watch_refresh_age_sec"),
