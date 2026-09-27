@@ -56,3 +56,17 @@ Detect → log candidate (incl. rejects) → multi-channel score → decision in
 | `x_intel/ingest` | Fixture/replay X + market interfaces |
 | `data/` | Prospective candidates, outcomes, decision fixtures |
 | `reports/` | Historian BATCH_01 artifacts |
+
+## Data channels (early discovery — parallel)
+
+In addition to the channels above, the **early-mover discovery bus** (`x_intel/discovery/`) ingests in parallel:
+
+7. **DexScreener new profiles/pairs** — pair create / first indexed sighting (Solana, Base, ETH, BSC+)
+8. **Bonding-curve activity** — pump.fun-style new curve + graduation/migrate events
+9. **Flow hints inbox** — first-buyer / cluster drops from Flow Desk (`data/flow_inbox/`)
+10. **FOMO / 0xbot sidebar** — lagging confirmation only (`data/fomo_inbox/`); never sole pursue
+11. **X social** — secondary CA/launch cues (wraps ingest fixtures / MCP later)
+
+Discovery fan-out: ledger write → market enrich → score gates → optional disarmed BUY → agent work orders in `data/agent_inbox/{narrative,market,flow,outcome}/`.
+
+See [EARLY_DISCOVERY.md](EARLY_DISCOVERY.md).

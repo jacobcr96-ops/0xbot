@@ -20,3 +20,22 @@ data/execution_reports/*.json
 !data/execution_reports/.gitkeep
 data/outcomes/exec_*.json
 data/outcomes/_execution_ingest.jsonl
+
+# discovery inboxes (keep dirs)
+data/fomo_inbox/*.json
+!data/fomo_inbox/.gitkeep
+data/flow_inbox/*.json
+!data/flow_inbox/.gitkeep
+data/agent_inbox/**/*.json
+!data/agent_inbox/.gitkeep
+data/discovery_bus.json
+.env
+
+# pump.fun live poll watermark (runtime)
+data/health/pump_cursor.json
+data/health/pump_cursor.json.tmp
+data/health/dex_cooldown_until
+
+# organic X CA-scoped search cache (agent-written; keep dir)
+data/x_organic/*.json
+!data/x_organic/.gitkeep

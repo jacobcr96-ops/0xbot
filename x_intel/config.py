@@ -12,6 +12,31 @@ from pathlib import Path
 from typing import Optional
 
 
+def _load_repo_env() -> None:
+    """Load simple KEY=VAL lines from repo .env if present (no python-dotenv required)."""
+    try:
+        env_path = Path(__file__).resolve().parents[1] / ".env"
+        if not env_path.is_file():
+            return
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            k, v = k.strip(), v.strip().strip('"').strip("'")
+            if not k:
+                continue
+            # .env is source of truth for arming; always apply XINTEL_* from file.
+            if k.startswith("XINTEL_") or k not in os.environ:
+                os.environ[k] = v
+    except OSError:
+        pass
+
+
+_load_repo_env()
+
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
@@ -51,11 +76,192 @@ def data_dir(start: Optional[Path] = None) -> Path:
     return (Path(__file__).resolve().parents[1] / "data").resolve()
 
 
-# BUY/ADD hard TTL — bridge RTT is 5–15s; 5 minutes leaves room without late chase.
-BUY_ADD_TTL_SECONDS = 300
+# BUY/ADD hard TTL — git handoff can cost ~3+ minutes; 20 minutes avoids false stale.
+BUY_ADD_TTL_SECONDS = 1200
 
 # Early MC gate for pursue→BUY (null MC allowed with warning).
-DEFAULT_EARLY_MC_USD_MAX = 500_000.0
+# Align with discovery pump/dex actionable early ceiling ($1M) so SCAT/ZEBRA-class
+# first-sights under $1M are not blocked at emit after quality pass.
+DEFAULT_EARLY_MC_USD_MAX = 1_000_000.0
 
 # Default size stub when emitting BUY from pursue.
 DEFAULT_BUY_PERCENT_EQUITY = 1.0
+# FOMO min notional ~$2.10; on ~$300 equity need >=~0.7%
+MIN_BUY_PERCENT_EQUITY = 0.75
+
+
+def x_social_live_enabled() -> bool:
+    """Scans should set XINTEL_X_SOCIAL_LIVE=1 for CA-scoped organic X path."""
+    return _env_bool("XINTEL_X_SOCIAL_LIVE", default=False)
+
+
+def organic_x_required_for_ping() -> bool:
+    """Jacob ping / xintel publish prefer organic_x when enabled."""
+    return _env_bool("XINTEL_ORGANIC_X_REQUIRED_FOR_PING", default=False)
+
+
+# ---------------------------------------------------------------------------
+# WATCH dip/reclaim BUY hard gates
+# ---------------------------------------------------------------------------
+
+DEFAULT_WATCH_BUY_MIN_MC_USD = 25_000.0
+DEFAULT_WATCH_BUY_DEDUPE_SEC = 2 * 3600
+
+
+def watch_buy_min_mc_usd() -> float:
+    """Live-MC floor for WATCH dip/reclaim BUYs (``XINTEL_WATCH_BUY_MIN_MC``, default 25k).
+
+    Below the floor escalation is a gate reject (dead / sub-floor coins never BUY).
+    """
+    raw = os.environ.get("XINTEL_WATCH_BUY_MIN_MC", "").strip()
+    if not raw:
+        return DEFAULT_WATCH_BUY_MIN_MC_USD
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return DEFAULT_WATCH_BUY_MIN_MC_USD
+
+
+def watch_buy_dedupe_sec() -> int:
+    """Never re-emit a WATCH BUY for the same mint within this window (default 2h)."""
+    raw = os.environ.get("XINTEL_WATCH_BUY_DEDUPE_SEC", "").strip()
+    if not raw:
+        return DEFAULT_WATCH_BUY_DEDUPE_SEC
+    try:
+        return max(DEFAULT_WATCH_BUY_DEDUPE_SEC, int(float(raw)))
+    except ValueError:
+        return DEFAULT_WATCH_BUY_DEDUPE_SEC
+
+
+def watch_buy_requires_organic_x() -> bool:
+    """WATCH dip/reclaim BUYs require real organic X (same bar as the ping gate).
+
+    Always on when ``XINTEL_ORGANIC_X_REQUIRED_FOR_PING`` is on; otherwise
+    ``XINTEL_WATCH_BUY_REQUIRE_ORGANIC_X`` (default on).
+    """
+    if organic_x_required_for_ping():
+        return True
+    return _env_bool("XINTEL_WATCH_BUY_REQUIRE_ORGANIC_X", default=True)
+
+
+
+# ---------------------------------------------------------------------------
+# Multi-chain discovery / quotes
+# ---------------------------------------------------------------------------
+
+DEFAULT_DISCOVERY_CHAINS: tuple[str, ...] = ("solana", "base", "ethereum", "bsc")
+EVM_CHAINS = frozenset(
+    {"ethereum", "base", "bsc", "arbitrum", "polygon", "avalanche", "optimism"}
+)
+
+# GoPlus token_security chain_id
+GOPLUS_CHAIN_IDS: dict[str, str] = {
+    "ethereum": "1",
+    "eth": "1",
+    "bsc": "56",
+    "base": "8453",
+    "arbitrum": "42161",
+    "polygon": "137",
+    "avalanche": "43114",
+    "optimism": "10",
+}
+
+# DexScreener chainId strings
+DEX_CHAIN_IDS: dict[str, str] = {
+    "solana": "solana",
+    "ethereum": "ethereum",
+    "eth": "ethereum",
+    "base": "base",
+    "bsc": "bsc",
+    "arbitrum": "arbitrum",
+    "polygon": "polygon",
+    "avalanche": "avalanche",
+    "optimism": "optimism",
+}
+
+
+def configured_chains() -> frozenset[str]:
+    """Chains enabled for Dex / multi-chain discovery.
+
+    Env ``XINTEL_CHAINS=solana,bsc,base`` (comma-separated). Default: solana+base+ethereum+bsc.
+    """
+    raw = os.environ.get("XINTEL_CHAINS", "").strip()
+    if not raw:
+        return frozenset(DEFAULT_DISCOVERY_CHAINS)
+    out: set[str] = set()
+    aliases = {
+        "sol": "solana",
+        "eth": "ethereum",
+        "ether": "ethereum",
+        "bnb": "bsc",
+        "binance": "bsc",
+    }
+    for part in raw.split(","):
+        c = part.strip().lower()
+        if not c:
+            continue
+        out.add(aliases.get(c, c))
+    return frozenset(out) if out else frozenset(DEFAULT_DISCOVERY_CHAINS)
+
+
+def is_evm_chain(chain: Optional[str]) -> bool:
+    return (chain or "").strip().lower() in EVM_CHAINS
+
+
+def goplus_chain_id(chain: str) -> Optional[str]:
+    return GOPLUS_CHAIN_IDS.get((chain or "").strip().lower())
+
+
+def dex_chain_id(chain: str) -> Optional[str]:
+    return DEX_CHAIN_IDS.get((chain or "").strip().lower())
+
+
+def evm_dex_min_interval_sec() -> float:
+    """Min seconds between EVM DexScreener discovery polls (Solana pump stays primary)."""
+    raw = os.environ.get("XINTEL_DEX_EVM_INTERVAL_SEC", "").strip()
+    if not raw:
+        return 300.0  # 5 minutes
+    try:
+        return max(60.0, float(raw))
+    except ValueError:
+        return 300.0
+
+
+def evm_dex_cooldown_sec() -> float:
+    """Cooldown after Dex 429 for EVM polls (longer than Solana path)."""
+    raw = os.environ.get("XINTEL_DEX_EVM_COOLDOWN_SEC", "").strip()
+    if not raw:
+        return 45 * 60.0  # 45 min
+    try:
+        return max(300.0, float(raw))
+    except ValueError:
+        return 45 * 60.0
+
+
+def _env_float(name: str, default: float, *, minimum: float) -> float:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(minimum, float(raw))
+    except ValueError:
+        return default
+
+
+def max_ingest_per_cycle() -> int:
+    """Per-cycle cap on ingested discovery events (``XINTEL_MAX_INGEST_PER_CYCLE``).
+
+    Enrich costs ~1s/mint, so an uncapped post-outage backlog can stall a cycle
+    for many minutes. Remainder is carried forward via the pump cursor backlog.
+    """
+    return int(_env_float("XINTEL_MAX_INGEST_PER_CYCLE", 150.0, minimum=1.0))
+
+
+def ingest_budget_sec() -> float:
+    """Wall-clock budget (from cycle start) after which ingest stops (``XINTEL_INGEST_BUDGET_SEC``)."""
+    return _env_float("XINTEL_INGEST_BUDGET_SEC", 200.0, minimum=5.0)
+
+
+def ingest_stale_skip_sec() -> float:
+    """When over the cap, backlog mints older than this are skipped (``XINTEL_INGEST_STALE_SKIP_SEC``)."""
+    return _env_float("XINTEL_INGEST_STALE_SKIP_SEC", 30 * 60.0, minimum=60.0)

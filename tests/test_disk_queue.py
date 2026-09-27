@@ -131,15 +131,15 @@ def test_armed_vs_disarmed_flag(tmp_ledger: CandidateLedger, monkeypatch: pytest
     assert dec2.do_not_execute_until_armed is False
 
 
-def test_default_buy_expiry_approx_300s():
-    assert BUY_ADD_TTL_SECONDS == 300
-    assert MODEL_TTL == 300
+def test_default_buy_expiry_approx_1200s():
+    assert BUY_ADD_TTL_SECONDS == 1200
+    assert MODEL_TTL == 1200
     now = datetime.now(timezone.utc)
     exp = default_expires_at(DecisionAction.BUY, now)
     delta = (exp - now).total_seconds()
-    assert abs(delta - 300) < 0.01
+    assert abs(delta - 1200) < 0.01
     exp_add = default_expires_at(DecisionAction.ADD, now)
-    assert abs((exp_add - now).total_seconds() - 300) < 0.01
+    assert abs((exp_add - now).total_seconds() - 1200) < 0.01
 
 
 def _pursue_candidate(
@@ -198,7 +198,7 @@ def test_pursue_buy_accepts_clean_pursue(tmp_ledger: CandidateLedger):
     assert dec.action == DecisionAction.BUY
     path = tmp_ledger.save_decision(dec)
     assert path.exists()
-    assert abs((dec.expires_at - dec.issued_at).total_seconds() - 300) < 0.01
+    assert abs((dec.expires_at - dec.issued_at).total_seconds() - 1200) < 0.01
 
 
 def test_execution_report_schema_roundtrip(tmp_ledger: CandidateLedger):

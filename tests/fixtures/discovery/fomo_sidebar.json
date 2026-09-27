@@ -1,0 +1,13 @@
+{
+  "events": [
+    {
+      "schema_version": "xintel.fomo_inbox.v0",
+      "observed_at": "2026-09-20T20:00:00+00:00",
+      "chain": "solana",
+      "ca": "FomoLateConf111111111111111111111111111111",
+      "ticker": "FOMO",
+      "mc_usd": 2500000,
+      "source_ui": "fomo_sidebar"
+    }
+  ]
+}

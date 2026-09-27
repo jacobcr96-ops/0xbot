@@ -11,13 +11,21 @@ import json
 import logging
 import sys
 import warnings
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
+from x_intel.discovery.gates import (
+    has_publish_quality_evidence,
+    has_real_organic_x,
+    has_watch_dip_quality_evidence,
+)
+from x_intel.discovery.models import DiscoveryRecord
+from x_intel.discovery.parasite import detect_parasite_by_ca
 from x_intel.config import (
     DEFAULT_BUY_PERCENT_EQUITY,
+    MIN_BUY_PERCENT_EQUITY,
     DEFAULT_EARLY_MC_USD_MAX,
     do_not_execute_until_armed,
     is_armed,
@@ -94,7 +102,8 @@ def _normalize_evidence(candidate: CandidateV1) -> list[EvidenceItem]:
     now = datetime.now(timezone.utc)
     for raw in candidate.evidence or []:
         if isinstance(raw, EvidenceItem):
-            items.append(raw)
+            # Force refs=[] even when copying typed items
+            items.append(raw.model_copy(update={"refs": []}))
             continue
         if not isinstance(raw, dict):
             continue
@@ -118,7 +127,7 @@ def _normalize_evidence(candidate: CandidateV1) -> list[EvidenceItem]:
                 channel=channel,  # type: ignore[arg-type]
                 summary=str(raw.get("summary") or ""),
                 observed_at=obs,
-                refs=raw.get("refs"),
+                refs=[],  # handoff contract: always [] never null/populated
                 weight=raw.get("weight"),
             )
         )
@@ -129,8 +138,15 @@ def check_pursue_buy_gates(
     candidate: CandidateV1,
     *,
     early_mc_usd_max: Optional[float] = DEFAULT_EARLY_MC_USD_MAX,
+    allow_watch_dip_quality: bool = False,
+    require_organic_x: bool = False,
 ) -> list[str]:
-    """Return warning strings; raise GateReject on hard failures."""
+    """Return warning strings; raise GateReject on hard failures.
+
+    ``require_organic_x`` (WATCH dip/reclaim path): no BUY without real organic X.
+    Soft paths (watch_dip_quality_path, "S1/S3 unset — soft pass") are downgraded
+    to a GateReject when organic X is missing.
+    """
     warnings_out: list[str] = []
 
     if candidate.decision != CandidateDecision.pursue:
@@ -149,6 +165,92 @@ def check_pursue_buy_gates(
     evidence = _normalize_evidence(candidate)
     if not evidence:
         raise GateReject("multi-channel evidence empty")
+
+    # --- Publish-quality gate (same rules as discovery.gates) ---
+    sources = [s for s in (candidate.source_accounts or []) if s]
+    hints: dict[str, Any] = {}
+    extra = getattr(candidate, "__pydantic_extra__", None) or {}
+    disc = extra.get("discovery") or {}
+    if isinstance(disc, dict):
+        for k in ("first_source", "sources", "gate_reasons", "gate_warnings"):
+            if k in disc and k not in hints:
+                hints[k] = disc[k]
+        # Live enrich identity + social hints (pump twitter, mc_source, …)
+        ch = disc.get("confidence_hints") or {}
+        if isinstance(ch, dict):
+            for k, v in ch.items():
+                hints.setdefault(k, v)
+        src_from_disc = disc.get("sources") or []
+        if isinstance(src_from_disc, list) and src_from_disc:
+            sources = list(dict.fromkeys([*sources, *[str(s) for s in src_from_disc]]))
+    fs = candidate.feature_scores
+    if fs is not None and fs.scores:
+        for fid, entry in fs.scores.items():
+            hints[fid] = entry.value
+    # evidence channels as soft sources (organic X posts only — not pump weak_narrative)
+    channels = {e.channel for e in evidence}
+    if "x_social" in channels and "x_social" not in sources:
+        sources.append("x_social")
+    if "onchain_flow" in channels and "flow_hint" not in sources:
+        sources.append("flow_hint")
+
+    mc = candidate.mc_usd_at_first_sight
+    if mc is None and isinstance(disc, dict):
+        mc = disc.get("mc_usd")
+    rec = DiscoveryRecord(
+        chain=candidate.chain or "solana",
+        ca=candidate.contract_address,
+        first_source=(sources[0] if sources else "other"),
+        first_seen_at=candidate.first_seen_at,
+        sources=sources,
+        ticker=candidate.ticker,
+        name=(disc.get("name") if isinstance(disc, dict) else None),
+        symbol=(disc.get("symbol") if isinstance(disc, dict) else None),
+        mc_usd=float(mc) if mc is not None else None,
+        mc_source=(disc.get("mc_source") if isinstance(disc, dict) else None),
+        confidence_hints=hints,
+    )
+    if detect_parasite_by_ca(rec) or hints.get("parasite") is True or hints.get("parasite_of_runner") is True:
+        raise GateReject("parasite_only — no emit")
+
+    organic = has_real_organic_x(rec, hints)
+    quality = has_publish_quality_evidence(rec, hints)
+    soft_quality_path = False
+    if not quality and allow_watch_dip_quality:
+        quality = has_watch_dip_quality_evidence(rec, hints)
+        if quality:
+            soft_quality_path = True
+            warnings_out.append("watch_dip_quality_path — non-clone curve/social without organic X")
+    if require_organic_x and not organic:
+        via = []
+        if soft_quality_path:
+            via.append("watch_dip_quality_path")
+        elif quality:
+            via.append("publish_quality_without_organic_x")
+        raise GateReject(
+            "watch_buy_requires_organic_x — no real organic X"
+            + (f" (downgraded {'/'.join(via)} to reject)" if via else "")
+        )
+
+    if (hints.get("boost_only") is True or hints.get("paid_boost") is True) and not quality:
+        raise GateReject("boost_only_no_organic — no emit")
+    non_lag = {s for s in sources if s and s != "fomo_sidebar"}
+    if (hints.get("thin_dex_new") is True or (non_lag and non_lag <= {"dexscreener_new"})) and not quality:
+        raise GateReject("thin_dex_new_only — no emit")
+    if not quality:
+        raise GateReject(
+            "publish quality missing — need organic X, positive flow, multi-channel, "
+            "or curve+social with reinforcement (mc_rising / profile / unique ticker)"
+            + ("; watch_dip non-clone curve/social also failed" if allow_watch_dip_quality else "")
+        )
+
+    # Late / post-move must never emit BUY
+    window = _window_type(candidate)
+    s2 = _feature_value(candidate, "S2")
+    if s2 == "late_challenger" and window != "frenzy-lane":
+        raise GateReject("post_move_not_early / S2=late_challenger — no BUY emit")
+    if hints.get("post_move_not_early") is True:
+        raise GateReject("post_move_not_early — no BUY emit")
 
     mc = candidate.mc_usd_at_first_sight
     # Prefer detection MC if present as extra
@@ -178,6 +280,9 @@ def check_pursue_buy_gates(
                 raise GateReject("feature gate: require S1=true OR S3=true when scores exist")
         else:
             # scores object present but S1/S3 null — soft warn
+            if require_organic_x and not organic:
+                # Belt-and-braces: soft pass may never arm a watch BUY without organic X
+                raise GateReject("watch_buy_requires_organic_x — S1/S3 unset soft pass downgraded to reject")
             warnings_out.append("S1/S3 unset — soft pass (v0)")
 
         window = _window_type(candidate)
@@ -202,9 +307,19 @@ def pursue_candidate_to_buy(
     early_mc_usd_max: Optional[float] = DEFAULT_EARLY_MC_USD_MAX,
     thesis: Optional[str] = None,
     issued_at: Optional[datetime] = None,
+    extra_risk_flags: Optional[list[str]] = None,
+    market_mc_usd: Optional[float] = None,
+    ttl_seconds: Optional[int] = None,
+    allow_watch_dip_quality: bool = False,
+    require_organic_x: bool = False,
 ) -> tuple[DecisionV1, list[str]]:
     """Build a BUY DecisionV1 from a pursue candidate. Raises GateReject on fail."""
-    warns = check_pursue_buy_gates(candidate, early_mc_usd_max=early_mc_usd_max)
+    warns = check_pursue_buy_gates(
+        candidate,
+        early_mc_usd_max=early_mc_usd_max,
+        allow_watch_dip_quality=allow_watch_dip_quality,
+        require_organic_x=require_organic_x,
+    )
     for w in warns:
         warnings.warn(w, stacklevel=2)
         log.warning(w)
@@ -217,29 +332,37 @@ def pursue_candidate_to_buy(
     evidence = _normalize_evidence(candidate)
     armed_flag = do_not_execute_until_armed()
 
+    flags = ["pursue_buy_emitter", "publish_quality_pass"]
+    for f in extra_risk_flags or []:
+        if f and f not in flags:
+            flags.append(str(f))
+
+    snap_mc = market_mc_usd if market_mc_usd is not None else candidate.mc_usd_at_first_sight
+    expires = default_expires_at(DecisionAction.BUY, now, ttl_seconds=ttl_seconds)
+
     decision = DecisionV1(
         decision_id=uuid4(),
         action=DecisionAction.BUY,
         issued_at=now,
-        expires_at=default_expires_at(DecisionAction.BUY, now),
+        expires_at=expires,
         contract_address=candidate.contract_address.strip(),
         chain=chain,  # type: ignore[arg-type]
         ticker=candidate.ticker,
         confidence=confidence,
         thesis=thesis
-        or f"pursue→BUY stub for {candidate.ticker or candidate.contract_address[:8]}",
+        or f"pursue→BUY {candidate.ticker or candidate.contract_address[:8]} (quality gate pass)",
         sizing_intent=SizingIntent(
             mode="percent_equity",
-            value=percent_equity,
+            value=max(float(percent_equity), float(MIN_BUY_PERCENT_EQUITY)),
             urgency="normal",
         ),
         market_snapshot=MarketSnapshot(
-            mc_usd=candidate.mc_usd_at_first_sight,
+            mc_usd=snap_mc,
             price_usd=candidate.price_usd_at_first_sight,
-            as_of=candidate.first_seen_at,
+            as_of=candidate.first_seen_at if market_mc_usd is None else now,
         ),
         evidence=evidence,
-        risk_flags=["pursue_buy_emitter", "v0_soft_gates"],
+        risk_flags=flags,
         experiment_id=candidate.experiment_id,
         candidate_id=str(candidate.candidate_id),
         do_not_execute_until_armed=armed_flag,
@@ -272,6 +395,18 @@ def emit_pursue_buy(
             cand = loaded
 
     decision, _warns = pursue_candidate_to_buy(cand, **kwargs)
+    banned = {"calibration_shadow", "shadow_only", "pipe_check", "PIPECHECK", "post_move_not_early"}
+    if banned.intersection(decision.risk_flags or []):
+        raise GateReject(
+            f"refusing emit with retired/shadow risk_flags: {sorted(banned.intersection(decision.risk_flags))}"
+        )
+    # Ensure refs always []
+    decision = decision.model_copy(
+        update={
+            "evidence": [e.model_copy(update={"refs": []}) for e in decision.evidence],
+            "risk_flags": [f for f in (decision.risk_flags or []) if f not in banned],
+        }
+    )
     if persist:
         path = led.save_decision(decision)
         log.info(
@@ -303,7 +438,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "--early-mc-max",
         type=float,
         default=DEFAULT_EARLY_MC_USD_MAX,
-        help="Reject if mc_usd_at_first_sight above this (default 500000)",
+        help="Reject if mc_usd_at_first_sight above this (default 1000000)",
     )
     parser.add_argument(
         "--allow-any-mc",

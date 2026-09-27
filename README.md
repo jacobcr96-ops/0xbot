@@ -21,6 +21,8 @@ make api              # uvicorn x_intel.api.main:app on :8080
 make mcp              # list MCP handoff tools
 make emit-buy CANDIDATE=<id>   # pursue→BUY → data/decisions/
 make ingest-reports   # load execution_report.v1 → outcomes
+make discovery-once    # poll discovery sources once (disarmed)
+make discovery-validate
 ```
 
 Or manually:
@@ -64,11 +66,18 @@ x_intel/
   research/     # historical cases / hypotheses loaders
   ingest/       # X + market interfaces (fixture/replay mode)
   emit/         # pursue→BUY emitter (disk queue)
+  discovery/    # early-mover bus (dex/pump/X/FOMO/flow)
   config.py     # XINTEL_DATA_DIR, XINTEL_ARMED
 docs/           # ARCHITECTURE, integration, outcome protocol, feature registry
 reports/        # BATCH_01 case files, signal hypotheses, leaderboard
 data/           # candidates, outcomes, decisions/ queue, execution_reports/
 ```
+
+### WATCH dip-buy (`watch_dip_buy`)
+
+Open `watch` candidates are MC-refreshed each discovery cycle (pump.fun; Dex skipped when `XINTEL_SKIP_DEX=true`). Freshness: `data/health/watch_freshness.json` + heartbeat `watch_count` / `watch_stale_count` / `oldest_watch_refresh_age_sec` (stale >10m, **buyable-only**: last MC ≥ `XINTEL_WATCH_BUY_MIN_MC`; sub-floor reported as `stale_subfloor`, never alert — see docs/EARLY_DISCOVERY.md).
+
+If MC dips to **≤$2M** and **≤85% of first-sight** (Solana, not hard-rugged / name-parasite), or reclaim after a sub-$2M print while still under `min(first_sight×1.1, $3.5M)`, emit one real BUY via `emit_pursue_buy` with `risk_flags` including **`watch_dip_buy`** (never `calibration_shadow`). No chase at **≥$4M** if never bought. Dedup one open dip-BUY per CA (re-emit only after TTL expiry). Size ≥0.75% equity, TTL 1200s, `refs=[]`.
 
 ## Safety rules
 
@@ -84,5 +93,8 @@ data/           # candidates, outcomes, decisions/ queue, execution_reports/
 - [docs/0xbot_integration.md](docs/0xbot_integration.md)
 - [docs/OUTCOME_PROTOCOL.md](docs/OUTCOME_PROTOCOL.md)
 - [docs/FEATURE_REGISTRY_v0.md](docs/FEATURE_REGISTRY_v0.md)
+- [docs/ORGANIC_X.md](docs/ORGANIC_X.md)
+- [docs/MULTI_CHAIN.md](docs/MULTI_CHAIN.md) — BSC/Base/ETH discovery + `live_quote --chain` — CA-scoped X cache; set `XINTEL_X_SOCIAL_LIVE=1` for scans
+- [docs/EARLY_DISCOVERY.md](docs/EARLY_DISCOVERY.md)
 - [reports/BATCH_01_INDEX.md](reports/BATCH_01_INDEX.md)
 - [reports/signal_hypotheses_v0.md](reports/signal_hypotheses_v0.md)

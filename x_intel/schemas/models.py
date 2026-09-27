@@ -38,7 +38,7 @@ EvidenceChannel = Literal[
 ]
 
 # BUY/ADD default TTL (seconds). Bridge RTT is 5–15s; 5 minutes is the handoff contract.
-BUY_ADD_TTL_SECONDS = 300
+BUY_ADD_TTL_SECONDS = 1200
 
 
 class DecisionAction(str, Enum):
@@ -74,7 +74,7 @@ class EvidenceItem(BaseModel):
     channel: EvidenceChannel
     summary: str
     observed_at: datetime
-    refs: Optional[list[str]] = None
+    refs: list[str] = Field(default_factory=list)
     weight: Optional[float] = None
 
 
@@ -98,6 +98,8 @@ class MarketSnapshot(BaseModel):
 
 class Outcomes(BaseModel):
     """Fractional returns from first_seen (0.25 = +25%)."""
+
+    model_config = ConfigDict(extra="allow")
 
     ret_5m: Optional[float] = None
     ret_15m: Optional[float] = None
