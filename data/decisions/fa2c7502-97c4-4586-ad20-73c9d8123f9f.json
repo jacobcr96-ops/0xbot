@@ -1,0 +1,58 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "fa2c7502-97c4-4586-ad20-73c9d8123f9f",
+  "action": "BUY",
+  "issued_at": "2026-09-27T23:57:48.838196Z",
+  "expires_at": "2026-09-28T00:17:48.838196Z",
+  "contract_address": "Eh5rTGmL7RHtdpRXLLX6xLsHvbSL6htVCa7ifhQVV1bf",
+  "chain": "solana",
+  "ticker": "GRUMPY",
+  "confidence": 0.55,
+  "thesis": "watch_dip_buy/watch_reclaim GRUMPY mc_now=28324.14934216017 first_sight=28277.637231494813 min_seen=25966.724668148487",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 0.75,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 28324.14934216017,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-27T23:57:48.838196Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Grumpy Cat symbol=GRUMPY mc_source=jupiter mc_usd=28277.637231494813",
+      "observed_at": "2026-09-27T22:50:03.515081Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=True (not organic X posts)",
+      "observed_at": "2026-09-27T22:50:03.515081Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-27T22:25:59.167775Z",
+      "refs": [],
+      "weight": 0.6
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "watch_dip_buy",
+    "watch_reclaim"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "63243690-253c-40b6-aac2-eba8ce949cdf",
+  "do_not_execute_until_armed": false
+}
