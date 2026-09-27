@@ -18,6 +18,15 @@ source whose last successful MC refresh is >24h old — or whose only price is a
 print older than 24h (no trades) — gets decision=reject,
 reject_reason=expired_stale, watch_status=expired_stale. The open-watch set,
 watch_freshness.json and heartbeat only count WATCHes that remain open.
+
+Dead-coin early close (before the 24h expiry): a WATCH is also closed as
+expired_stale when the live source repeatedly reports a dead coin —
+LAST_PRINT (Jupiter print >24h old, no trades) for WATCH_DEAD_LAST_PRINT_STREAK
+consecutive refreshes, or no MC at all for WATCH_DEAD_NULL_STREAK consecutive
+refreshes — AND a corroborating dead signal holds: holders <= 1, liquidity ~0,
+or MC below the ``XINTEL_WATCH_BUY_MIN_MC`` floor. A single failed fetch (or a
+Jupiter batch outage) never counts, and coins with real MC/liquidity/holders
+are never closed by this path.
 """
 
 from __future__ import annotations
@@ -72,6 +81,11 @@ NO_CHASE_MC_USD = 4_000_000.0
 WATCH_STALE_SEC = 600  # 10 minutes
 WATCH_EXPIRE_SEC = 24 * 3600  # close WATCH after 24h without a live price
 WATCH_EXPIRED_STATUS = "expired_stale"
+# Dead-coin early close (see module docstring)
+WATCH_DEAD_LAST_PRINT_STREAK = 2  # runner refreshes twice per cycle
+WATCH_DEAD_NULL_STREAK = 3
+WATCH_DEAD_MAX_HOLDERS = 1
+WATCH_DEAD_MAX_LIQ_USD = 100.0
 DIP_BUY_PERCENT_EQUITY = max(0.75, float(MIN_BUY_PERCENT_EQUITY))
 DIP_BUY_TTL_SECONDS = BUY_ADD_TTL_SECONDS  # 1200
 DIP_BUY_CONFIDENCE = 0.55
@@ -331,6 +345,7 @@ def fetch_mc_quote(
     """
     empty: dict[str, Any] = {"mc_usd": None, "source": None, "price_updated_at": None, "price_live": False}
     ca = (ca or "").strip()
+    jup_meta: dict[str, Any] = {}
     if not ca:
         return empty
     chain_n = (chain or "").strip().lower()
@@ -347,12 +362,18 @@ def fetch_mc_quote(
             jup_asset = assets.get(ca)
         if jup_asset is not None:
             q = quote_from_jup_asset(ca, jup_asset)
+            jup_meta = {
+                "holder_count": q.get("holder_count"),
+                "liq_usd": q.get("liq_usd"),
+                "jup_seen": True,
+            }
             if q.get("mc_usd") is not None:
                 return {
                     "mc_usd": float(q["mc_usd"]),
                     "source": "jupiter",
                     "price_updated_at": q.get("price_updated_at"),
                     "price_live": bool(q.get("price_live")),
+                    **jup_meta,
                 }
         mc = _fetch_pumpfun_mc(ca, timeout_s=timeout_s)
         if mc is not None:
@@ -367,7 +388,7 @@ def fetch_mc_quote(
         mc = _fetch_dex_mc(ca, chain=chain_n if is_evm else None, timeout_s=timeout_s)
         if mc is not None:
             return {"mc_usd": mc, "source": "dexscreener", "price_updated_at": None, "price_live": True}
-    return empty
+    return {**empty, **jup_meta}
 
 
 def fetch_mc_usd(
@@ -499,10 +520,82 @@ def _normalize_fetch_result(res: Any) -> dict[str, Any]:
             "source": res.get("source"),
             "price_updated_at": res.get("price_updated_at"),
             "price_live": bool(res.get("price_live", mc is not None)),
+            "holder_count": res.get("holder_count"),
+            "liq_usd": res.get("liq_usd"),
         }
     if res is None:
         return {"mc_usd": None, "source": None, "price_updated_at": None, "price_live": False}
     return {"mc_usd": float(res), "source": "fetcher", "price_updated_at": None, "price_live": True}
+
+
+def _fnum(v: Any) -> Optional[float]:
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_last_print(q: dict[str, Any], *, now: datetime) -> bool:
+    """MC known but the print is >24h old (no trades) — live_quote LAST_PRINT."""
+    if q.get("mc_usd") is None or q.get("price_live"):
+        return False
+    upd = _parse_dt(q.get("price_updated_at"))
+    if upd is None:
+        return False
+    if upd.tzinfo is None:
+        upd = upd.replace(tzinfo=timezone.utc)
+    return (now - upd).total_seconds() > PRICE_LIVE_MAX_AGE_SEC
+
+
+def dead_coin_corroboration(
+    *,
+    holder_count: Optional[float],
+    liq_usd: Optional[float],
+    mc_usd: Optional[float],
+    floor: Optional[float] = None,
+) -> Optional[str]:
+    """Return which dead-coin signal holds (holders<=1 / liq~0 / MC<floor), else None."""
+    floor = watch_buy_min_mc_usd() if floor is None else floor
+    h, liq, mc = _fnum(holder_count), _fnum(liq_usd), _fnum(mc_usd)
+    if h is not None and h <= WATCH_DEAD_MAX_HOLDERS:
+        return f"holders={int(h)}"
+    if liq is not None and liq < WATCH_DEAD_MAX_LIQ_USD:
+        return f"liq_usd={liq:.0f}"
+    if mc is not None and mc < floor:
+        return f"mc_below_floor mc={mc:.0f} floor={floor:.0f}"
+    return None
+
+
+def evaluate_dead_watch(
+    *,
+    kind: Optional[str],
+    streak: int,
+    holder_count: Optional[float],
+    liq_usd: Optional[float],
+    mc_usd: Optional[float],
+    floor: Optional[float] = None,
+) -> Optional[str]:
+    """Pure: close reason when a WATCH is a confirmed dead coin, else None.
+
+    kind is "last_print" or "no_mc" (this refresh's dead signal) and streak the
+    number of consecutive refreshes (incl. this one) with a dead signal.
+    """
+    if kind == "last_print":
+        need = WATCH_DEAD_LAST_PRINT_STREAK
+    elif kind == "no_mc":
+        need = WATCH_DEAD_NULL_STREAK
+    else:
+        return None
+    if streak < need:
+        return None
+    why = dead_coin_corroboration(
+        holder_count=holder_count, liq_usd=liq_usd, mc_usd=mc_usd, floor=floor
+    )
+    if why is None:
+        return None
+    return f"dead_coin_{kind} streak={streak} {why}"
 
 
 def _expire_watch(
@@ -613,6 +706,65 @@ def refresh_open_watches(
         mc = q["mc_usd"]
         price_live = bool(q["price_live"]) and mc is not None
 
+        # Dead-coin streak: LAST_PRINT or no MC from a source that did answer.
+        # Fetch exceptions / Jupiter batch outages never count (one failed
+        # fetch must not close a real coin).
+        extra0 = _cand_extra(cand)
+        dead_kind: Optional[str] = None
+        if not price_live and err is None:
+            if _is_last_print(q, now=now):
+                dead_kind = "last_print"
+            elif mc is None and not (mc_fetcher is None and live and jup_errors):
+                dead_kind = "no_mc"
+        prev_streak = int(_fnum(extra0.get("watch_dead_streak")) or 0)
+        streak = prev_streak + 1 if dead_kind else 0
+        holders = q.get("holder_count")
+        if holders is None:
+            holders = extra0.get("holder_count")
+        liq_now = q.get("liq_usd")
+        if liq_now is None:
+            liq_now = extra0.get("liq_usd_now")
+        dead_reason = None
+        if do_expire and dead_kind:
+            dead_reason = evaluate_dead_watch(
+                kind=dead_kind,
+                streak=streak,
+                holder_count=holders,
+                liq_usd=liq_now,
+                mc_usd=mc if mc is not None else get_refreshed_mc_now(cand),
+            )
+        if dead_reason is not None:
+            _expire_watch(
+                led,
+                cand,
+                now=now,
+                reason=dead_reason,
+                last_refresh=prev_refreshed,
+                last_print=q if mc is not None else None,
+            )
+            expired.append(
+                {
+                    "candidate_id": str(cand.candidate_id),
+                    "ticker": cand.ticker,
+                    "ca": ca,
+                    "reason": dead_reason,
+                    "last_refresh_at": prev_refreshed.isoformat() if prev_refreshed else None,
+                    "last_print_mc_usd": mc,
+                    "last_print_at": q.get("price_updated_at"),
+                    "holder_count": holders,
+                    "liq_usd": liq_now,
+                }
+            )
+            continue
+        dead_updates: dict[str, Any] = {}
+        if q.get("holder_count") is not None:
+            dead_updates["holder_count"] = q.get("holder_count")
+        if q.get("liq_usd") is not None:
+            dead_updates["liq_usd_now"] = q.get("liq_usd")
+        if streak != prev_streak:
+            dead_updates["watch_dead_streak"] = streak
+            dead_updates["watch_dead_signal"] = dead_kind
+
         if do_expire and not price_live:
             baseline = prev_refreshed or _parse_dt(cand.first_seen_at)
             if baseline is not None and baseline.tzinfo is None:
@@ -653,6 +805,7 @@ def refresh_open_watches(
                 extra_updates={
                     "mc_source": q.get("source"),
                     "price_updated_at": q.get("price_updated_at"),
+                    **dead_updates,
                 },
             )
             refreshed_at = now
@@ -667,7 +820,10 @@ def refresh_open_watches(
                     led,
                     cand,
                     min_mc_usd_seen=known,
+                    extra_updates=dead_updates or None,
                 )
+            elif dead_updates:
+                cand = _persist_candidate_meta(led, cand, extra_updates=dead_updates)
 
         age_sec: Optional[float] = None
         if refreshed_at is not None:
@@ -698,6 +854,8 @@ def refresh_open_watches(
                 "refresh_age_sec": age_sec,
                 "stale": age_sec is None or age_sec > WATCH_STALE_SEC,
                 "fetch_error": err,
+                "dead_signal": dead_kind,
+                "dead_streak": streak,
             }
         )
 
