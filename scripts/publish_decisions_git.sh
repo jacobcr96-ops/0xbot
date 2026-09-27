@@ -13,6 +13,7 @@ mapfile -t FILES < <(find data/decisions -maxdepth 1 -type f -name '*.json' ! -n
 # Skip test/shadow artifacts unless FORCE_PUBLISH_TESTS=1
 # Retired: calibration_shadow | shadow_only | pipe_check | PIPECHECK
 PUB=()
+SKIP_IDS=()
 for f in "${FILES[@]:-}"; do
   [[ -z "${f:-}" ]] && continue
   if [[ "${FORCE_PUBLISH_TESTS:-0}" != "1" ]]; then
@@ -20,6 +21,15 @@ for f in "${FILES[@]:-}"; do
       echo "skip test/shadow artifact $f"
       continue
     fi
+  fi
+  # Cancelled / expired-by-intel decisions (e.g. cancel_reason=dead_coin_floor)
+  # are never published. Checked with jq so formatting/spacing cannot slip past.
+  if jq -e '(.status // "" | ascii_downcase | IN("cancelled","canceled","expired"))
+            or .cancelled == true or .expired == true or .do_not_publish == true' \
+        "$f" >/dev/null 2>&1; then
+    echo "skip cancelled/expired decision $f ($(jq -r '.cancel_reason // .status // "cancelled"' "$f" 2>/dev/null))"
+    SKIP_IDS+=("$(jq -r '.decision_id // empty' "$f" 2>/dev/null)")
+    continue
   fi
   PUB+=("$f")
 done
@@ -46,7 +56,15 @@ for f in "${PUB[@]:-}"; do
   cp "$f" "$TMP/wt/data/decisions/"
 done
 # keep inbox optional (skip if only shadow lines — copy as-is; consumers filter flags)
-[[ -f data/decisions/inbox.jsonl ]] && cp data/decisions/inbox.jsonl "$TMP/wt/data/decisions/" || true
+# Drop inbox lines for cancelled/expired decisions (never ship them to 0xbot).
+if [[ -f data/decisions/inbox.jsonl ]]; then
+  if [[ ${#SKIP_IDS[@]} -gt 0 ]]; then
+    printf '%s\n' "${SKIP_IDS[@]}" | grep -v '^$' > "$TMP/skip_ids.txt" || true
+    grep -v -F -f "$TMP/skip_ids.txt" data/decisions/inbox.jsonl > "$TMP/wt/data/decisions/inbox.jsonl" || true
+  else
+    cp data/decisions/inbox.jsonl "$TMP/wt/data/decisions/"
+  fi
+fi
 
 cd "$TMP/wt"
 git add data/decisions

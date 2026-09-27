@@ -167,6 +167,14 @@ def _organic_x_evidence(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
     return True
 
 
+def has_real_organic_x(rec: DiscoveryRecord, hints: Optional[dict[str, Any]] = None) -> bool:
+    """Strict organic X (ping-gate bar): explicit ``organic_x=True`` from CA-scoped
+    posts and not boost-only. Bare/legacy ``x_social`` source does NOT count.
+    """
+    h = hints if hints is not None else _feature_hints(rec)
+    return h.get("organic_x") is True and _organic_x_evidence(rec, h)
+
+
 def _first_buyer_flow_positive(rec: DiscoveryRecord, hints: dict[str, Any]) -> bool:
     """Positive first-buyer / flow desk signal (non-sybil)."""
     has_flow = "flow_hint" in _sources(rec) or hints.get("flow_hint") is True

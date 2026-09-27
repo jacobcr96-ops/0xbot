@@ -166,6 +166,8 @@ def _watch_cand(
         mc_usd_now=mc_now,
         min_mc_usd_seen=mc_now,
         refreshed_at=now.isoformat().replace("+00:00", "Z"),
+        # Watch BUYs require real organic X (ping-gate bar)
+        discovery={"confidence_hints": {"organic_x": True, "x_social": True}},
     )
 
 
@@ -253,8 +255,9 @@ def test_freshness_file_written(tmp_data: Path):
     assert float(extra.get("min_mc_usd_seen") or 0) == 1_550_000.0
 
 
-def test_watch_dip_emits_without_organic_x_for_curve_unique(tmp_data: Path):
-    """Real dip on non-clone curve watch may BUY without organic X evidence."""
+def test_watch_dip_rejects_without_organic_x_for_curve_unique(tmp_data: Path):
+    """Real dip on non-clone curve watch passes watch_dip_quality_path but must NOT
+    BUY without organic X (downgraded to a logged gate reject)."""
     now = datetime.now(timezone.utc)
     cand = CandidateV1(
         candidate_id=uuid4(),
@@ -299,8 +302,10 @@ def test_watch_dip_emits_without_organic_x_for_curve_unique(tmp_data: Path):
         emit_buy=True,
         mc_fetcher=lambda ca, chain="solana": 450_000.0,
     )
-    assert summary["buy_emitted_n"] == 1
-    assert summary["buys"][0]["reason"] == "watch_dip"
+    assert summary["buy_emitted_n"] == 0
+    reason = summary["escalate"][0]["reason"]
+    assert reason.startswith("gate_reject:watch_buy_requires_organic_x")
+    assert list((tmp_data / "decisions").glob("*.json")) == []
 
 
 def test_watch_dip_still_rejects_clone_storm_quality(tmp_data: Path):

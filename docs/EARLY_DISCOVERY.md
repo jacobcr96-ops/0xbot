@@ -184,3 +184,27 @@ Agent writes `data/x_organic/<mint>.json` (≤5 CAs/cycle); enrich stamps `organ
 ## Multi-chain (BSC / Base / ETH)
 
 See [MULTI_CHAIN.md](MULTI_CHAIN.md).
+
+## WATCH dip/reclaim BUY hard gates
+
+Every WATCH dip/reclaim BUY (`watch_escalate.py`) must pass, in order (applied
+even under `--no-emit`, so the escalate summary never shows `should_buy` for a
+gated row):
+
+| Gate | Env | Default | Reject reason |
+|------|-----|---------|---------------|
+| Live-MC floor | `XINTEL_WATCH_BUY_MIN_MC` | `25000` | `gate_reject:mc_below_watch_buy_floor` |
+| Per-mint dedupe vs ANY prior watch BUY (incl. expired/cancelled) | `XINTEL_WATCH_BUY_DEDUPE_SEC` (cannot go below 7200) | 2h | `gate_reject:watch_buy_dedupe_2h` |
+| Real organic X (`organic_x=True`, CA-scoped, not boost) | on whenever `XINTEL_ORGANIC_X_REQUIRED_FOR_PING=1`; else `XINTEL_WATCH_BUY_REQUIRE_ORGANIC_X` (default on) | on | `gate_reject:watch_buy_requires_organic_x` |
+
+`watch_dip_quality_path` and `S1/S3 unset — soft pass` can no longer arm a watch
+BUY without organic X; they are downgraded to a logged gate reject.
+A drawdown-from-first-sight floor is intentionally NOT implemented (pending decision).
+
+### Cancelling queued decisions
+Set on the decision JSON: `status="cancelled"`, `cancelled=true`,
+`do_not_publish=true`, `do_not_execute_until_armed=true`, `expires_at=<now>`
+(original kept in `original_expires_at`), `cancel_reason`, plus an
+`acks/<id>.json` sidecar with `status=expired`. `scripts/publish_decisions_git.sh`
+skips any decision with `status` cancelled/expired, `cancelled|expired|do_not_publish`
+true, and drops their lines from the published `inbox.jsonl`.

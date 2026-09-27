@@ -16,7 +16,11 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
-from x_intel.discovery.gates import has_publish_quality_evidence, has_watch_dip_quality_evidence
+from x_intel.discovery.gates import (
+    has_publish_quality_evidence,
+    has_real_organic_x,
+    has_watch_dip_quality_evidence,
+)
 from x_intel.discovery.models import DiscoveryRecord
 from x_intel.discovery.parasite import detect_parasite_by_ca
 from x_intel.config import (
@@ -135,8 +139,14 @@ def check_pursue_buy_gates(
     *,
     early_mc_usd_max: Optional[float] = DEFAULT_EARLY_MC_USD_MAX,
     allow_watch_dip_quality: bool = False,
+    require_organic_x: bool = False,
 ) -> list[str]:
-    """Return warning strings; raise GateReject on hard failures."""
+    """Return warning strings; raise GateReject on hard failures.
+
+    ``require_organic_x`` (WATCH dip/reclaim path): no BUY without real organic X.
+    Soft paths (watch_dip_quality_path, "S1/S3 unset — soft pass") are downgraded
+    to a GateReject when organic X is missing.
+    """
     warnings_out: list[str] = []
 
     if candidate.decision != CandidateDecision.pursue:
@@ -203,11 +213,24 @@ def check_pursue_buy_gates(
     if detect_parasite_by_ca(rec) or hints.get("parasite") is True or hints.get("parasite_of_runner") is True:
         raise GateReject("parasite_only — no emit")
 
+    organic = has_real_organic_x(rec, hints)
     quality = has_publish_quality_evidence(rec, hints)
+    soft_quality_path = False
     if not quality and allow_watch_dip_quality:
         quality = has_watch_dip_quality_evidence(rec, hints)
         if quality:
+            soft_quality_path = True
             warnings_out.append("watch_dip_quality_path — non-clone curve/social without organic X")
+    if require_organic_x and not organic:
+        via = []
+        if soft_quality_path:
+            via.append("watch_dip_quality_path")
+        elif quality:
+            via.append("publish_quality_without_organic_x")
+        raise GateReject(
+            "watch_buy_requires_organic_x — no real organic X"
+            + (f" (downgraded {'/'.join(via)} to reject)" if via else "")
+        )
 
     if (hints.get("boost_only") is True or hints.get("paid_boost") is True) and not quality:
         raise GateReject("boost_only_no_organic — no emit")
@@ -257,6 +280,9 @@ def check_pursue_buy_gates(
                 raise GateReject("feature gate: require S1=true OR S3=true when scores exist")
         else:
             # scores object present but S1/S3 null — soft warn
+            if require_organic_x and not organic:
+                # Belt-and-braces: soft pass may never arm a watch BUY without organic X
+                raise GateReject("watch_buy_requires_organic_x — S1/S3 unset soft pass downgraded to reject")
             warnings_out.append("S1/S3 unset — soft pass (v0)")
 
         window = _window_type(candidate)
@@ -285,12 +311,14 @@ def pursue_candidate_to_buy(
     market_mc_usd: Optional[float] = None,
     ttl_seconds: Optional[int] = None,
     allow_watch_dip_quality: bool = False,
+    require_organic_x: bool = False,
 ) -> tuple[DecisionV1, list[str]]:
     """Build a BUY DecisionV1 from a pursue candidate. Raises GateReject on fail."""
     warns = check_pursue_buy_gates(
         candidate,
         early_mc_usd_max=early_mc_usd_max,
         allow_watch_dip_quality=allow_watch_dip_quality,
+        require_organic_x=require_organic_x,
     )
     for w in warns:
         warnings.warn(w, stacklevel=2)

@@ -100,6 +100,50 @@ def organic_x_required_for_ping() -> bool:
     return _env_bool("XINTEL_ORGANIC_X_REQUIRED_FOR_PING", default=False)
 
 
+# ---------------------------------------------------------------------------
+# WATCH dip/reclaim BUY hard gates
+# ---------------------------------------------------------------------------
+
+DEFAULT_WATCH_BUY_MIN_MC_USD = 25_000.0
+DEFAULT_WATCH_BUY_DEDUPE_SEC = 2 * 3600
+
+
+def watch_buy_min_mc_usd() -> float:
+    """Live-MC floor for WATCH dip/reclaim BUYs (``XINTEL_WATCH_BUY_MIN_MC``, default 25k).
+
+    Below the floor escalation is a gate reject (dead / sub-floor coins never BUY).
+    """
+    raw = os.environ.get("XINTEL_WATCH_BUY_MIN_MC", "").strip()
+    if not raw:
+        return DEFAULT_WATCH_BUY_MIN_MC_USD
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return DEFAULT_WATCH_BUY_MIN_MC_USD
+
+
+def watch_buy_dedupe_sec() -> int:
+    """Never re-emit a WATCH BUY for the same mint within this window (default 2h)."""
+    raw = os.environ.get("XINTEL_WATCH_BUY_DEDUPE_SEC", "").strip()
+    if not raw:
+        return DEFAULT_WATCH_BUY_DEDUPE_SEC
+    try:
+        return max(DEFAULT_WATCH_BUY_DEDUPE_SEC, int(float(raw)))
+    except ValueError:
+        return DEFAULT_WATCH_BUY_DEDUPE_SEC
+
+
+def watch_buy_requires_organic_x() -> bool:
+    """WATCH dip/reclaim BUYs require real organic X (same bar as the ping gate).
+
+    Always on when ``XINTEL_ORGANIC_X_REQUIRED_FOR_PING`` is on; otherwise
+    ``XINTEL_WATCH_BUY_REQUIRE_ORGANIC_X`` (default on).
+    """
+    if organic_x_required_for_ping():
+        return True
+    return _env_bool("XINTEL_WATCH_BUY_REQUIRE_ORGANIC_X", default=True)
+
+
 
 # ---------------------------------------------------------------------------
 # Multi-chain discovery / quotes

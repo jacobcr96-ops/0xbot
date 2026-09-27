@@ -6,6 +6,13 @@ XINTEL_SKIP_DEX, and as an emergency fallback), tracks min_mc_usd_seen, and may
 emit one real BUY via emit_pursue_buy with risk_flags including watch_dip_buy.
 Never emits calibration_shadow / shadow intents.
 
+Hard gates on every WATCH dip/reclaim BUY (applied even with --no-emit so the
+escalate summary is truthful):
+  * live-MC floor ``XINTEL_WATCH_BUY_MIN_MC`` (default $25k) — dead coins never BUY
+  * 2h per-mint dedupe vs any prior watch BUY (incl. cancelled ones)
+  * real organic X required (same bar as ``XINTEL_ORGANIC_X_REQUIRED_FOR_PING``);
+    watch_dip_quality_path / "S1/S3 unset — soft pass" never arm a BUY without it.
+
 Stale WATCHes are closed (never deleted): a WATCH with no live price from any
 source whose last successful MC refresh is >24h old — or whose only price is a
 print older than 24h (no trades) — gets decision=reject,
@@ -29,6 +36,9 @@ from x_intel.config import (
     data_dir,
     do_not_execute_until_armed,
     is_armed,
+    watch_buy_dedupe_sec,
+    watch_buy_min_mc_usd,
+    watch_buy_requires_organic_x,
 )
 from x_intel.discovery.enrich import (
     PRICE_LIVE_MAX_AGE_SEC,
@@ -36,6 +46,8 @@ from x_intel.discovery.enrich import (
     quote_from_jup_asset,
     skip_jup,
 )
+from x_intel.discovery.gates import has_real_organic_x
+from x_intel.discovery.organic_x import annotate_organic_x_hints
 from x_intel.emit.pursue_buy import GateReject, emit_pursue_buy
 from x_intel.io_atomic import atomic_read_json, atomic_write_json
 from x_intel.ledger.store import CandidateLedger, RepoPaths
@@ -813,6 +825,100 @@ def _prior_dip_buy(
     return None
 
 
+def _watch_buy_history(ledger: CandidateLedger) -> dict[str, datetime]:
+    """Map CA -> latest issued_at of ANY prior watch_dip_buy BUY decision.
+
+    Includes expired / cancelled decisions on purpose: the 2h dedupe must hold
+    even after a prior BUY was TTL-expired or cancelled (STAMP re-fire).
+    """
+    out: dict[str, datetime] = {}
+    ddir = ledger.paths.decisions
+    if not ddir.is_dir():
+        return out
+    for path in ddir.glob("*.json"):
+        if path.name.startswith("_") or path.name.endswith(".tmp"):
+            continue
+        raw = atomic_read_json(path)
+        if not isinstance(raw, dict):
+            continue
+        if str(raw.get("action") or "").upper() != "BUY":
+            continue
+        if "watch_dip_buy" not in set(raw.get("risk_flags") or []):
+            continue
+        ca = (raw.get("contract_address") or "").strip()
+        issued = _parse_dt(raw.get("issued_at"))
+        if not ca or issued is None:
+            continue
+        if issued.tzinfo is None:
+            issued = issued.replace(tzinfo=timezone.utc)
+        if ca not in out or issued > out[ca]:
+            out[ca] = issued
+    return out
+
+
+def _last_watch_buy_at(
+    cand: CandidateV1, history: dict[str, datetime]
+) -> Optional[datetime]:
+    ca = (cand.contract_address or "").strip()
+    best = history.get(ca)
+    meta = _parse_dt(_cand_extra(cand).get("watch_dip_buy_emitted_at"))
+    if meta is not None:
+        if meta.tzinfo is None:
+            meta = meta.replace(tzinfo=timezone.utc)
+        if best is None or meta > best:
+            best = meta
+    return best
+
+
+def _watch_hints(cand: CandidateV1, *, data_root: Optional[Path] = None) -> tuple[Any, dict[str, Any]]:
+    """Discovery hints for a WATCH with fresh ``data/x_organic/<mint>.json`` merged."""
+    from types import SimpleNamespace
+
+    extra = _cand_extra(cand)
+    disc = extra.get("discovery") if isinstance(extra.get("discovery"), dict) else {}
+    hints = dict((disc or {}).get("confidence_hints") or {})
+    sources = [str(s) for s in (cand.source_accounts or []) if s]
+    for s_ in (disc or {}).get("sources") or []:
+        if s_ and str(s_) not in sources:
+            sources.append(str(s_))
+    rec = SimpleNamespace(ca=(cand.contract_address or "").strip(), confidence_hints=hints, sources=sources)
+    try:
+        annotate_organic_x_hints(rec, data_root=data_root)
+    except Exception as e:  # noqa: BLE001
+        log.debug("organic_x annotate failed ca=%s…: %s", rec.ca[:12], e)
+    return rec, dict(rec.confidence_hints or {})
+
+
+def watch_buy_hard_gate(
+    cand: CandidateV1,
+    *,
+    mc_now: Optional[float],
+    now: datetime,
+    history: dict[str, datetime],
+    data_root: Optional[Path] = None,
+) -> Optional[str]:
+    """Return a reject reason when a WATCH dip/reclaim BUY must not emit, else None."""
+    floor = watch_buy_min_mc_usd()
+    try:
+        mc = float(mc_now) if mc_now is not None else None
+    except (TypeError, ValueError):
+        mc = None
+    if mc is None or mc < floor:
+        return f"mc_below_watch_buy_floor mc={mc} floor={floor:.0f}"
+    last = _last_watch_buy_at(cand, history)
+    window = watch_buy_dedupe_sec()
+    if last is not None and (now - last).total_seconds() < window:
+        return (
+            f"watch_buy_dedupe_{window // 3600}h last_watch_buy_at="
+            f"{last.isoformat().replace('+00:00', 'Z')}"
+        )
+    if watch_buy_requires_organic_x():
+        rec, hints = _watch_hints(cand, data_root=data_root)
+        if not has_real_organic_x(rec, hints):  # type: ignore[arg-type]
+            return "watch_buy_requires_organic_x — no real organic X (soft paths downgraded)"
+    return None
+
+
 def _mark_dip_emitted(
     ledger: CandidateLedger,
     cand: CandidateV1,
@@ -840,6 +946,7 @@ def escalate_watch_dips(
     led = ledger or CandidateLedger(RepoPaths(data=root))
     now = _now()
     results: list[dict[str, Any]] = []
+    history = _watch_buy_history(led)
 
     for cand in led.list_candidates(decision=CandidateDecision.watch.value):
         # reload to pick up refresh meta
@@ -908,6 +1015,25 @@ def escalate_watch_dips(
             "buy_decision_id": None,
             "do_not_execute_until_armed": do_not_execute_until_armed(),
         }
+        if should:
+            hard = watch_buy_hard_gate(
+                fresh, mc_now=mc_now, now=now, history=history, data_root=led.paths.data
+            )
+            if hard is not None:
+                row["reason"] = f"gate_reject:{hard}"
+                row["should_buy"] = False
+                row["watch_signal"] = reason
+                results.append(row)
+                log.info(
+                    "watch dip-buy gate reject ca=%s… ticker=%s signal=%s mc=%s: %s",
+                    ca[:12],
+                    fresh.ticker,
+                    reason,
+                    mc_now,
+                    hard,
+                )
+                continue
+
         if not should or not emit:
             results.append(row)
             continue
@@ -933,6 +1059,7 @@ def escalate_watch_dips(
             continue
 
         _mark_dip_emitted(led, fresh, decision)
+        history[ca] = decision.issued_at if decision.issued_at.tzinfo else decision.issued_at.replace(tzinfo=timezone.utc)
         row["buy_decision_id"] = str(decision.decision_id)
         row["do_not_execute_until_armed"] = decision.do_not_execute_until_armed
         results.append(row)
@@ -966,6 +1093,9 @@ def _emit_watch_dip_buy(
     reason: str,
 ) -> DecisionV1:
     """Emit via emit_pursue_buy with watch_dip_buy flag; never calibration_shadow."""
+    floor = watch_buy_min_mc_usd()
+    if mc_now is None or float(mc_now) < floor:
+        raise GateReject(f"mc_below_watch_buy_floor mc={mc_now} floor={floor:.0f}")
     # Temporarily treat as pursue for gate path
     pursue_cand = cand.model_copy(update={"decision": CandidateDecision.pursue})
     # Ensure evidence has refs=[] compatible channels; inject launch_metrics if empty
@@ -989,6 +1119,11 @@ def _emit_watch_dip_buy(
     extra = dict(getattr(pursue_cand, "__pydantic_extra__", None) or {})
     disc = dict(extra.get("discovery") or {})
     ch = dict(disc.get("confidence_hints") or {})
+    # Fresh CA-scoped organic X (data/x_organic/<mint>.json) for the organic gate
+    _rec, fresh_hints = _watch_hints(cand, data_root=ledger.paths.data)
+    for k in ("organic_x", "x_social", "organic_x_eval", "organic_x_refs"):
+        if k in fresh_hints:
+            ch[k] = fresh_hints[k]
     if mc_now is not None:
         ch["mc_usd_now"] = mc_now
     disc["confidence_hints"] = ch
@@ -1020,6 +1155,7 @@ def _emit_watch_dip_buy(
         market_mc_usd=mc_now,
         ttl_seconds=DIP_BUY_TTL_SECONDS,
         allow_watch_dip_quality=relax,
+        require_organic_x=watch_buy_requires_organic_x(),
     )
     # Final assert: no shadow flags, refs empty, armed policy
     banned = {"calibration_shadow", "shadow_only", "pipe_check", "PIPECHECK"}
