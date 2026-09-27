@@ -1,0 +1,78 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "be7cb305-15b8-4645-a18a-ee31ee02b2e7",
+  "action": "BUY",
+  "issued_at": "2026-09-27T22:02:10.471773Z",
+  "expires_at": "2026-09-27T22:22:10.471773Z",
+  "contract_address": "HKwYUzswLjKZYyNfmLakdL3Um8JeLpn1Bbr78JjLpump",
+  "chain": "solana",
+  "ticker": "CLOWD",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY CLOWD (quality gate pass); organic_x CA-mention from @LaunchOnClowd; live MC~$3442 via jupiter",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 3441.5319412435183,
+    "price_usd": 3.4415319412435183e-06,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-27T22:05:32.517182+00:00",
+    "mc_source": "jupiter",
+    "live_quote": {
+      "ok": true,
+      "mc_usd": 3441.5319412435183,
+      "source": "jupiter",
+      "fetched_at": "2026-09-27T22:05:32.517182+00:00",
+      "price_live": true,
+      "mc_status": "LIVE"
+    }
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Clowd symbol=CLOWD mc_source=jupiter mc_usd=3439.613558752756",
+      "observed_at": "2026-09-27T22:02:09.582697Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-27T22:02:09.582697Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-27T22:00:47.975523Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "social_x",
+      "summary": "organic_x=True recent_ca_mention non_farm_author posts=1",
+      "observed_at": "2026-09-27T22:05:32.564889Z",
+      "refs": [
+        "https://x.com/LaunchOnClowd/status/2104330024728068518"
+      ],
+      "weight": 0.7
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared",
+    "jacob_ping"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "6f11a53a-4422-4190-87d7-07d10accb800",
+  "do_not_execute_until_armed": false,
+  "organic_x": true,
+  "jacob_ping": true
+}
