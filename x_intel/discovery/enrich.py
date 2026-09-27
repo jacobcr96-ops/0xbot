@@ -1,4 +1,12 @@
-"""Live market enrich — pump.fun primary (Solana), DexScreener + GoPlus for EVM.
+"""Live market enrich — Jupiter datapi primary (Solana), pump.fun + DexScreener
+fallbacks, DexScreener + GoPlus for EVM.
+
+Solana per-mint MC: pump.fun ``GET /coins/{mint}`` started returning 404 (list
+feed still works), so Jupiter's public asset endpoint
+(``datapi.jup.ag/v1/assets/search?query=<mint>[,<mint>...]``) is the primary
+source. It is keyless, batches up to 100 mints per call, and returns mcap,
+usdPrice, liquidity and ``updatedAt`` (last price update) for pump.fun curve
+and graduated coins alike.
 
 Never leave enrich as a no-op stub. Prefer pump.fun fields to minimize X spend.
 Respects XINTEL_SKIP_DEX for Solana only — EVM has no pump fallback so Dex/GoPlus
@@ -28,6 +36,10 @@ log = logging.getLogger(__name__)
 
 UA = "x-intel-discovery/0.2"
 PUMPFUN_COIN_URL = "https://frontend-api-v3.pump.fun/coins/{mint}"
+JUP_ASSETS_URL = "https://datapi.jup.ag/v1/assets/search?query={q}"
+JUP_BATCH_MAX = 50
+# A quote whose last on-chain price update is older than this is not "live".
+PRICE_LIVE_MAX_AGE_SEC = 24 * 3600
 DEX_TOKEN_URL = "https://api.dexscreener.com/latest/dex/tokens/{mint}"
 DEX_TOKEN_CHAIN_URL = "https://api.dexscreener.com/tokens/v1/{chain}/{mint}"
 GOPLUS_SECURITY_URL = (
@@ -54,6 +66,10 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 def skip_dex() -> bool:
     return _env_bool("XINTEL_SKIP_DEX", default=False)
+
+
+def skip_jup() -> bool:
+    return _env_bool("XINTEL_SKIP_JUP", default=False)
 
 
 def skip_enrich() -> bool:
@@ -97,6 +113,117 @@ def _f(v: Any) -> Optional[float]:
         return float(v)
     except (TypeError, ValueError):
         return None
+
+
+def _parse_iso(v: Any) -> Optional[datetime]:
+    if not v or not isinstance(v, str):
+        return None
+    t = v.strip().replace("Z", "+00:00")
+    # Jupiter emits nanosecond fractions; fromisoformat accepts at most 6 digits.
+    m = re.match(r"^(.*T\d{2}:\d{2}:\d{2})(\.\d+)?(.*)$", t)
+    if m:
+        frac = (m.group(2) or "")[:7]
+        t = m.group(1) + frac + (m.group(3) or "")
+    try:
+        dt = datetime.fromisoformat(t)
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def fetch_jup_assets(
+    mints: list[str],
+    *,
+    timeout: float = 10.0,
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Batch Jupiter datapi asset lookup. Returns ({mint: asset}, errors).
+
+    Only exact id matches are kept (the endpoint is a search API).
+    """
+    want = [m.strip() for m in mints if m and m.strip() and not looks_like_evm_ca(m)]
+    out: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    for i in range(0, len(want), JUP_BATCH_MAX):
+        chunk = want[i : i + JUP_BATCH_MAX]
+        url = JUP_ASSETS_URL.format(q=",".join(chunk))
+        try:
+            d = _http_get_json(url, timeout=timeout)
+        except HTTPError as e:
+            errors.append(f"jup:HTTP{e.code}")
+            if e.code == 429:
+                break
+            continue
+        except (URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as e:
+            errors.append(f"jup:{type(e).__name__}")
+            continue
+        if not isinstance(d, list):
+            errors.append("jup:bad_payload")
+            continue
+        wanted = set(chunk)
+        for a in d:
+            if isinstance(a, dict) and a.get("id") in wanted:
+                out[str(a["id"])] = a
+    return out, errors
+
+
+def quote_from_jup_asset(
+    mint: str,
+    a: dict[str, Any],
+    *,
+    now: Optional[datetime] = None,
+) -> dict[str, Any]:
+    """Normalize a Jupiter asset row into the quote_mint dict shape."""
+    now = now or datetime.now(timezone.utc)
+    mc = _f(a.get("mcap"))
+    if mc is None:
+        mc = _f(a.get("fdv"))
+    upd = _parse_iso(a.get("updatedAt"))
+    price_age = max(0.0, (now - upd).total_seconds()) if upd else None
+    live = mc is not None and price_age is not None and price_age <= PRICE_LIVE_MAX_AGE_SEC
+    s24 = a.get("stats24h") or {}
+    s1h = a.get("stats1h") or {}
+    vol = None
+    if isinstance(s24, dict) and (s24.get("buyVolume") is not None or s24.get("sellVolume") is not None):
+        vol = (_f(s24.get("buyVolume")) or 0.0) + (_f(s24.get("sellVolume")) or 0.0)
+    bc = _f(a.get("bondingCurve"))
+    return {
+        "ok": mc is not None,
+        "mint": mint,
+        "ca": mint,
+        "chain": "solana",
+        "ticker": a.get("symbol"),
+        "name": a.get("name"),
+        "mc_usd": mc,
+        "price_usd": _f(a.get("usdPrice")),
+        "liq_usd": _f(a.get("liquidity")),
+        "volume_h24": vol,
+        "chg_1h": s1h.get("priceChange") if isinstance(s1h, dict) else None,
+        "holder_count": _f(a.get("holderCount")),
+        "twitter": a.get("twitter") or "",
+        "telegram": a.get("telegram") or "",
+        "website": a.get("website") or "",
+        "complete": (bc >= 100.0) if bc is not None else None,
+        "launchpad": a.get("launchpad"),
+        "price_updated_at": upd.isoformat() if upd else None,
+        "price_age_sec": int(price_age) if price_age is not None else None,
+        "price_live": live,
+        "source": "jupiter",
+        "fetched_at": now.isoformat(),
+        "age_sec": 0,
+        # MC known but no trade in 24h → report it, flagged stale (not live).
+        "stale": not live,
+    }
+
+
+def _fetch_jup_quote(mint: str, *, timeout: float) -> tuple[Optional[dict[str, Any]], list[str]]:
+    assets, errs = fetch_jup_assets([mint], timeout=timeout)
+    a = assets.get(mint)
+    if a is None:
+        return None, errs or ["jup:not_found"]
+    q = quote_from_jup_asset(mint, a)
+    if q.get("mc_usd") is None:
+        return None, errs + ["jup:no_mc"]
+    return q, errs
 
 
 def is_real_social_url(url: Optional[str]) -> bool:
@@ -299,7 +426,9 @@ def quote_mint(
 ) -> dict[str, Any]:
     """Live quote for a mint/CA.
 
-    Solana: pump.fun first, then Dex unless XINTEL_SKIP_DEX.
+    Solana: Jupiter datapi first (unless XINTEL_SKIP_JUP), then pump.fun coin
+    detail, then Dex unless XINTEL_SKIP_DEX (Dex also used as an emergency
+    fallback when both fail).
     EVM (bsc/base/ethereum/… or 0x CA): DexScreener (chain-filtered), then GoPlus
     metadata fallback. Never invents mc_usd — sets stale=True when unknown.
 
@@ -331,7 +460,16 @@ def quote_mint(
 
     pump_partial: Optional[dict[str, Any]] = None
 
-    # --- Solana: pump.fun first ---
+    # --- Solana: Jupiter datapi primary (pump.fun coin detail 404s) ---
+    if not evm and not skip_jup():
+        jq, jerrs = _fetch_jup_quote(mint, timeout=timeout)
+        errors.extend(jerrs)
+        if jq is not None:
+            if jerrs:
+                jq["errors"] = list(jerrs)
+            return jq
+
+    # --- Solana: pump.fun coin detail (second path) ---
     if not evm:
         try:
             d = _http_get_json(PUMPFUN_COIN_URL.format(mint=mint), timeout=timeout)
@@ -710,5 +848,9 @@ __all__ = [
     "resolve_quote_chain",
     "skip_dex",
     "skip_enrich",
+    "skip_jup",
+    "fetch_jup_assets",
+    "quote_from_jup_asset",
+    "PRICE_LIVE_MAX_AGE_SEC",
     "EARLY_MC_SECONDARY_USD",
 ]

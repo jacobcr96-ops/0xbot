@@ -161,6 +161,10 @@ def _write_cycle_heartbeat(
             "watch_stale_count", raw.get("watch_stale_count")
         )
         raw["buy_emitted"] = watch_summary.get("buy_emitted_n", raw.get("buy_emitted"))
+        raw["watch_expired_n"] = watch_summary.get("watch_expired_n", 0)
+        raw["oldest_watch_refresh_age_sec"] = watch_summary.get(
+            "oldest_watch_refresh_age_sec", raw.get("oldest_watch_refresh_age_sec")
+        )
     atomic_write_json(path, raw)
 
 

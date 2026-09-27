@@ -7,7 +7,10 @@ Usage::
     python -m x_intel.tools.live_quote --chain base --ca 0x...
     python -m x_intel.tools.live_quote --ticker CROW --chain bsc
 
-Prints JSON with mc_usd, source, fetched_at, age_sec=0 on success.
+Solana source order: Jupiter datapi (primary) → pump.fun coin detail → Dex.
+Prints JSON with mc_usd, source, fetched_at, age_sec=0 on success, plus
+price_updated_at / price_age_sec when the source reports last-trade time.
+mc_status: LIVE, LAST_PRINT (MC known but no trade in 24h), or STALE.
 Exit 2 if live sources fail or MC unknown (caller must say STALE).
 Never invents market cap.
 """
@@ -31,7 +34,7 @@ def _get(url: str, timeout: float = 10.0) -> Any:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Live token quote (Dex / pump / GoPlus)")
+    ap = argparse.ArgumentParser(description="Live token quote (Jupiter / pump / Dex / GoPlus)")
     ap.add_argument("--mint", default=None, help="Solana mint (or any CA)")
     ap.add_argument("--ca", default=None, help="Contract address (alias of --mint; prefer with --chain)")
     ap.add_argument(
@@ -106,6 +109,10 @@ def main(argv: list[str] | None = None) -> int:
         out["stale"] = True
         out.setdefault("ok", False)
         out["mc_status"] = "STALE"
+    elif out.get("price_live") is False:
+        # Jupiter returned a real MC but the last trade is >24h old
+        out["mc_status"] = "LAST_PRINT"
+        out["stale"] = True
     else:
         out["mc_status"] = "LIVE"
         out["stale"] = False

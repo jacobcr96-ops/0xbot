@@ -1,9 +1,16 @@
 """WATCH → dip-BUY escalation + anti-stale MC refresh.
 
-After each discovery cycle refreshes open WATCH market caps (pump.fun primary;
-DexScreener optional unless XINTEL_SKIP_DEX), tracks min_mc_usd_seen, and may
+After each discovery cycle refreshes open WATCH market caps (Jupiter datapi
+batch primary; pump.fun coin detail second; DexScreener optional unless
+XINTEL_SKIP_DEX, and as an emergency fallback), tracks min_mc_usd_seen, and may
 emit one real BUY via emit_pursue_buy with risk_flags including watch_dip_buy.
 Never emits calibration_shadow / shadow intents.
+
+Stale WATCHes are closed (never deleted): a WATCH with no live price from any
+source whose last successful MC refresh is >24h old — or whose only price is a
+print older than 24h (no trades) — gets decision=reject,
+reject_reason=expired_stale, watch_status=expired_stale. The open-watch set,
+watch_freshness.json and heartbeat only count WATCHes that remain open.
 """
 
 from __future__ import annotations
@@ -22,6 +29,12 @@ from x_intel.config import (
     data_dir,
     do_not_execute_until_armed,
     is_armed,
+)
+from x_intel.discovery.enrich import (
+    PRICE_LIVE_MAX_AGE_SEC,
+    fetch_jup_assets,
+    quote_from_jup_asset,
+    skip_jup,
 )
 from x_intel.emit.pursue_buy import GateReject, emit_pursue_buy
 from x_intel.io_atomic import atomic_read_json, atomic_write_json
@@ -45,6 +58,8 @@ RECLAIM_VS_FIRST_SIGHT_MAX = 1.10
 RECLAIM_MC_USD_CAP = 3_500_000.0
 NO_CHASE_MC_USD = 4_000_000.0
 WATCH_STALE_SEC = 600  # 10 minutes
+WATCH_EXPIRE_SEC = 24 * 3600  # close WATCH after 24h without a live price
+WATCH_EXPIRED_STATUS = "expired_stale"
 DIP_BUY_PERCENT_EQUITY = max(0.75, float(MIN_BUY_PERCENT_EQUITY))
 DIP_BUY_TTL_SECONDS = BUY_ADD_TTL_SECONDS  # 1200
 DIP_BUY_CONFIDENCE = 0.55
@@ -285,22 +300,27 @@ def evaluate_watch_dip_buy(
 # ---------------------------------------------------------------------------
 
 
-def fetch_mc_usd(
+def fetch_mc_quote(
     ca: str,
     *,
     chain: str = "solana",
     timeout_s: float = 8.0,
     allow_dex: Optional[bool] = None,
-) -> Optional[float]:
-    """Fetch USD market cap.
+    jup_asset: Optional[dict[str, Any]] = None,
+    try_jup: bool = True,
+) -> dict[str, Any]:
+    """Fetch USD market cap with provenance.
 
-    Solana: pump.fun primary; Dex when not XINTEL_SKIP_DEX.
-    EVM (bsc/base/ethereum/… or 0x CA): Dex always (no pump); ignore SKIP_DEX.
-    Never invents MC — returns None when unknown.
+    Returns {mc_usd, source, price_updated_at, price_live}. mc_usd None when
+    unknown. Solana: Jupiter (prefetched ``jup_asset`` or live) → pump.fun
+    coin detail → Dex (emergency even when SKIP_DEX). EVM: Dex only.
+    price_live is True when the price printed within PRICE_LIVE_MAX_AGE_SEC
+    (Jupiter updatedAt) or came from pump/Dex live endpoints.
     """
+    empty: dict[str, Any] = {"mc_usd": None, "source": None, "price_updated_at": None, "price_live": False}
     ca = (ca or "").strip()
     if not ca:
-        return None
+        return empty
     chain_n = (chain or "").strip().lower()
     is_evm = chain_n in {"base", "ethereum", "bsc", "arbitrum", "polygon", "avalanche", "optimism"} or ca.lower().startswith("0x")
 
@@ -310,9 +330,21 @@ def fetch_mc_usd(
         use_dex = allow_dex
 
     if not is_evm:
+        if jup_asset is None and try_jup and not skip_jup():
+            assets, _errs = fetch_jup_assets([ca], timeout=timeout_s)
+            jup_asset = assets.get(ca)
+        if jup_asset is not None:
+            q = quote_from_jup_asset(ca, jup_asset)
+            if q.get("mc_usd") is not None:
+                return {
+                    "mc_usd": float(q["mc_usd"]),
+                    "source": "jupiter",
+                    "price_updated_at": q.get("price_updated_at"),
+                    "price_live": bool(q.get("price_live")),
+                }
         mc = _fetch_pumpfun_mc(ca, timeout_s=timeout_s)
         if mc is not None:
-            return mc
+            return {"mc_usd": mc, "source": "pump.fun", "price_updated_at": None, "price_live": True}
         # Emergency: pump coin detail 404s — try Dex even when SKIP_DEX.
         if not use_dex:
             log.warning(
@@ -320,8 +352,21 @@ def fetch_mc_usd(
             )
             use_dex = True
     if use_dex:
-        return _fetch_dex_mc(ca, chain=chain_n if is_evm else None, timeout_s=timeout_s)
-    return None
+        mc = _fetch_dex_mc(ca, chain=chain_n if is_evm else None, timeout_s=timeout_s)
+        if mc is not None:
+            return {"mc_usd": mc, "source": "dexscreener", "price_updated_at": None, "price_live": True}
+    return empty
+
+
+def fetch_mc_usd(
+    ca: str,
+    *,
+    chain: str = "solana",
+    timeout_s: float = 8.0,
+    allow_dex: Optional[bool] = None,
+) -> Optional[float]:
+    """Fetch USD market cap (see fetch_mc_quote). Never invents MC."""
+    return fetch_mc_quote(ca, chain=chain, timeout_s=timeout_s, allow_dex=allow_dex).get("mc_usd")
 
 
 def _fetch_pumpfun_mc(ca: str, *, timeout_s: float) -> Optional[float]:
@@ -433,42 +478,159 @@ def _persist_candidate_meta(
 # ---------------------------------------------------------------------------
 
 
+def _normalize_fetch_result(res: Any) -> dict[str, Any]:
+    """mc_fetcher may return a float (legacy/tests) or a fetch_mc_quote dict."""
+    if isinstance(res, dict):
+        mc = res.get("mc_usd")
+        return {
+            "mc_usd": float(mc) if mc is not None else None,
+            "source": res.get("source"),
+            "price_updated_at": res.get("price_updated_at"),
+            "price_live": bool(res.get("price_live", mc is not None)),
+        }
+    if res is None:
+        return {"mc_usd": None, "source": None, "price_updated_at": None, "price_live": False}
+    return {"mc_usd": float(res), "source": "fetcher", "price_updated_at": None, "price_live": True}
+
+
+def _expire_watch(
+    ledger: CandidateLedger,
+    cand: CandidateV1,
+    *,
+    now: datetime,
+    reason: str,
+    last_refresh: Optional[datetime],
+    last_print: Optional[dict[str, Any]] = None,
+) -> CandidateV1:
+    """Close a WATCH as expired_stale. Keeps the file + all prior fields (history)."""
+    path = ledger.paths.candidates / f"{cand.candidate_id}.json"
+    raw = atomic_read_json(path) or cand.model_dump(mode="json")
+    now_z = now.isoformat().replace("+00:00", "Z")
+    raw["decision"] = CandidateDecision.reject.value
+    raw["reject_reason"] = WATCH_EXPIRED_STATUS
+    raw["watch_status"] = WATCH_EXPIRED_STATUS
+    raw["prior_decision"] = CandidateDecision.watch.value
+    raw["watch_closed_at"] = now_z
+    raw["watch_close_reason"] = reason
+    raw["watch_last_refresh_at"] = (
+        last_refresh.isoformat().replace("+00:00", "Z") if last_refresh else None
+    )
+    if last_print and last_print.get("mc_usd") is not None:
+        raw["watch_last_print"] = {
+            "mc_usd": last_print.get("mc_usd"),
+            "source": last_print.get("source"),
+            "price_updated_at": last_print.get("price_updated_at"),
+            "checked_at": now_z,
+        }
+    hist = raw.get("watch_status_history")
+    if not isinstance(hist, list):
+        hist = []
+    hist.append({"at": now_z, "from": "watch", "to": WATCH_EXPIRED_STATUS, "reason": reason})
+    raw["watch_status_history"] = hist
+    raw["updated_at"] = now_z
+    closed = CandidateV1.model_validate(raw)
+    # save_candidate appends the transition to _index.jsonl (audit trail)
+    ledger.save_candidate(closed, append_index=True)
+    return closed
+
+
 def refresh_open_watches(
     *,
     ledger: Optional[CandidateLedger] = None,
     data_root: Optional[Path] = None,
     live: bool = True,
     mc_fetcher: Optional[Any] = None,
+    expire_stale: Optional[bool] = None,
 ) -> dict[str, Any]:
-    """Refresh MC for all open WATCH candidates; write freshness + heartbeat fields."""
+    """Refresh MC for all open WATCH candidates; write freshness + heartbeat fields.
+
+    expire_stale (default: on when live) closes WATCHes with no live price whose
+    last successful refresh is >WATCH_EXPIRE_SEC old, so the watchdog only sees
+    the open set.
+    """
     root = data_root or data_dir()
     led = ledger or CandidateLedger(RepoPaths(data=root))
-    fetcher = mc_fetcher or (fetch_mc_usd if live else (lambda *a, **k: None))
+    fetcher = mc_fetcher or (fetch_mc_quote if live else (lambda *a, **k: None))
+    do_expire = live if expire_stale is None else bool(expire_stale)
     now = _now()
 
     watches = led.list_candidates(decision=CandidateDecision.watch.value)
+
+    # One batched Jupiter call for every Solana WATCH (primary MC source).
+    jup_map: dict[str, dict[str, Any]] = {}
+    jup_errors: list[str] = []
+    if live and mc_fetcher is None and not skip_jup():
+        sol = [
+            (c.contract_address or "").strip()
+            for c in watches
+            if (c.chain or "solana").lower() == "solana"
+            and not (c.contract_address or "").lower().startswith("0x")
+        ]
+        if sol:
+            jup_map, jup_errors = fetch_jup_assets(sol, timeout=10.0)
+            if jup_errors:
+                log.warning("watch refresh: jupiter batch errors=%s", jup_errors)
+
     rows: list[dict[str, Any]] = []
+    expired: list[dict[str, Any]] = []
     stale_count = 0
     oldest_age: Optional[float] = None
+    source_counts: dict[str, int] = {}
 
     for cand in watches:
-        mc = None
         err = None
+        prev_refreshed = get_refreshed_at(cand)
+        ca = (cand.contract_address or "").strip()
         try:
-            mc = fetcher(cand.contract_address, chain=cand.chain)
-        except TypeError:
-            # allow simple callables(ca) for tests
-            try:
-                mc = fetcher(cand.contract_address)
-            except Exception as e:  # noqa: BLE001
-                err = str(e)
-                mc = None
+            if mc_fetcher is None and live:
+                res = fetch_mc_quote(
+                    ca,
+                    chain=cand.chain,
+                    jup_asset=jup_map.get(ca),
+                    try_jup=False,  # batch already covered Jupiter
+                )
+            else:
+                try:
+                    res = fetcher(cand.contract_address, chain=cand.chain)
+                except TypeError:
+                    res = fetcher(cand.contract_address)
         except Exception as e:  # noqa: BLE001
             err = str(e)
-            mc = None
+            res = None
+        q = _normalize_fetch_result(res)
+        mc = q["mc_usd"]
+        price_live = bool(q["price_live"]) and mc is not None
+
+        if do_expire and not price_live:
+            baseline = prev_refreshed or _parse_dt(cand.first_seen_at)
+            if baseline is not None and baseline.tzinfo is None:
+                baseline = baseline.replace(tzinfo=timezone.utc)
+            since = (now - baseline).total_seconds() if baseline else None
+            if since is None or since > WATCH_EXPIRE_SEC:
+                reason = "no_trades_24h" if mc is not None else "no_live_price_24h"
+                _expire_watch(
+                    led,
+                    cand,
+                    now=now,
+                    reason=reason,
+                    last_refresh=prev_refreshed,
+                    last_print=q if mc is not None else None,
+                )
+                expired.append(
+                    {
+                        "candidate_id": str(cand.candidate_id),
+                        "ticker": cand.ticker,
+                        "ca": ca,
+                        "reason": reason,
+                        "last_refresh_at": prev_refreshed.isoformat() if prev_refreshed else None,
+                        "last_print_mc_usd": mc,
+                        "last_print_at": q.get("price_updated_at"),
+                    }
+                )
+                continue
 
         prev_min = get_min_mc_seen(cand)
-        if mc is not None:
+        if mc is not None and price_live:
             new_min = mc if prev_min is None else min(prev_min, mc)
             cand = _persist_candidate_meta(
                 led,
@@ -476,10 +638,16 @@ def refresh_open_watches(
                 mc_usd_now=mc,
                 min_mc_usd_seen=new_min,
                 refreshed_at=now,
+                extra_updates={
+                    "mc_source": q.get("source"),
+                    "price_updated_at": q.get("price_updated_at"),
+                },
             )
             refreshed_at = now
+            src = str(q.get("source") or "unknown")
+            source_counts[src] = source_counts.get(src, 0) + 1
         else:
-            refreshed_at = get_refreshed_at(cand)
+            refreshed_at = prev_refreshed
             # still track min from whatever we know
             known = get_mc_now(cand)
             if known is not None and (prev_min is None or known < prev_min):
@@ -512,6 +680,8 @@ def refresh_open_watches(
                 "mc_usd_now": get_mc_now(cand),
                 "min_mc_usd_seen": get_min_mc_seen(cand),
                 "mc_usd_at_first_sight": cand.mc_usd_at_first_sight,
+                "mc_source": q.get("source") if price_live else None,
+                "price_updated_at": q.get("price_updated_at"),
                 "refreshed_at": (refreshed_at.isoformat() if refreshed_at else None),
                 "refresh_age_sec": age_sec,
                 "stale": age_sec is None or age_sec > WATCH_STALE_SEC,
@@ -519,30 +689,39 @@ def refresh_open_watches(
             }
         )
 
+    open_n = len(rows)
     freshness = {
         "checked_at": now.isoformat(),
-        "watch_count": len(watches),
+        "watch_count": open_n,
         "watch_stale_count": stale_count,
         "oldest_watch_refresh_age_sec": oldest_age,
         "stale_threshold_sec": WATCH_STALE_SEC,
+        "expire_threshold_sec": WATCH_EXPIRE_SEC,
+        "watch_expired_n": len(expired),
+        "mc_source_counts": source_counts,
+        "jup_errors": jup_errors,
         "skip_dex": skip_dex(),
         "armed": is_armed(),
         "watches": rows,
+        "expired_this_cycle": expired,
     }
     health_dir = root / "health"
     health_dir.mkdir(parents=True, exist_ok=True)
     atomic_write_json(health_dir / "watch_freshness.json", freshness)
     _patch_heartbeat(
         health_dir / "heartbeat.json",
-        watch_count=len(watches),
+        watch_count=open_n,
         watch_stale_count=stale_count,
         oldest_watch_refresh_age_sec=oldest_age,
+        watch_expired_n=len(expired),
     )
     log.info(
-        "watch refresh n=%d stale=%d oldest_age=%s",
-        len(watches),
+        "watch refresh n=%d stale=%d expired=%d oldest_age=%s sources=%s",
+        open_n,
         stale_count,
+        len(expired),
         oldest_age,
+        source_counts,
     )
     return freshness
 
@@ -553,9 +732,11 @@ def _patch_heartbeat(
     watch_count: int,
     watch_stale_count: int,
     oldest_watch_refresh_age_sec: Optional[float],
+    watch_expired_n: int = 0,
 ) -> None:
     raw = atomic_read_json(path) or {}
     raw["watch_count"] = watch_count
+    raw["watch_expired_n"] = watch_expired_n
     raw["watch_stale_count"] = watch_stale_count
     raw["oldest_watch_refresh_age_sec"] = oldest_watch_refresh_age_sec
     raw["watch_freshness_checked_at"] = _now().isoformat()
@@ -877,6 +1058,8 @@ def run_watch_escalate_cycle(
     return {
         "watch_count": freshness.get("watch_count"),
         "watch_stale_count": freshness.get("watch_stale_count"),
+        "watch_expired_n": freshness.get("watch_expired_n"),
+        "expired": freshness.get("expired_this_cycle"),
         "oldest_watch_refresh_age_sec": freshness.get("oldest_watch_refresh_age_sec"),
         "escalate_n": len(emits),
         "buy_emitted_n": len(bought),
