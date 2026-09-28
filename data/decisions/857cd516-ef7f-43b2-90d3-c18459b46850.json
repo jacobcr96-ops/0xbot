@@ -1,0 +1,80 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "857cd516-ef7f-43b2-90d3-c18459b46850",
+  "action": "BUY",
+  "issued_at": "2026-09-28T14:42:51.324Z",
+  "expires_at": "2026-09-28T15:02:51.324Z",
+  "contract_address": "2EUKLvNQ63YCmjSDyJ14Tzj7ASeHGXgseYWrKAa2mine",
+  "chain": "solana",
+  "ticker": "MINEPAD",
+  "confidence": 0.62,
+  "thesis": "pursue\u2192BUY MINEPAD organic_x clear (quality gate pass + CA-scoped X)",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 30680.93184360479,
+    "price_usd": 3.266002397547299e-05,
+    "liquidity_usd": 6318.312667432073,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "holders": 363.0,
+    "as_of": "2026-09-28T14:42:41.138465+00:00",
+    "mc_source": "jupiter",
+    "mc_usd_at_first_sight": 13762.045841534602
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=minepad symbol=MINEPAD mc_source=jupiter mc_usd=13762.045841534602",
+      "observed_at": "2026-09-28T13:42:10.282761Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T13:42:10.282761Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T13:40:39.057239Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "organic_x",
+      "summary": "CA-scoped X posts=20 organic_x=True reasons=recent_ca_mention,non_farm_author matching_n=20 (TG-call ring soft-note)",
+      "observed_at": "2026-09-28T14:42:51.324612+00:00",
+      "refs": [
+        "https://x.com/bitecong/status/2104581367808028832",
+        "https://x.com/RyanM1820358/status/2104580581145117071",
+        "https://x.com/apacsol/status/2104580585280737373"
+      ],
+      "weight": 0.8
+    },
+    {
+      "channel": "live_quote",
+      "summary": "live jupiter MC~$30,681 holders=363 liq~$6,318 chg_1h~+151% graduated",
+      "observed_at": "2026-09-28T14:42:51.324612+00:00",
+      "refs": [],
+      "weight": 0.7
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared",
+    "jacob_ping_real_buy"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "afb1e3f9-010e-42be-9c91-6fa3012cdba4",
+  "do_not_execute_until_armed": false,
+  "parent_decision_id": "30025cb3-4ed9-4cb4-8ebc-01b82e4086aa"
+}
