@@ -1,0 +1,70 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "73826bcf-06fc-4047-b329-fb3bd8c96e04",
+  "action": "BUY",
+  "issued_at": "2026-09-28T05:41:38.096375Z",
+  "expires_at": "2026-09-28T06:01:38.096375Z",
+  "contract_address": "DGXf3mT2TaHsfy1Cn2p9CCSxfKENNM3oHPoR59Uwpump",
+  "chain": "solana",
+  "ticker": "tr/acc",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY tr/acc + organic_x cleared (project @tracclol + CA mentions); live MC~$198k holders=2052",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 198285.31838785156,
+    "price_usd": null,
+    "liquidity_usd": 19935.9421170138,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T05:45:27.812287+00:00",
+    "holders": 2052.0,
+    "source": "jupiter",
+    "mc_status": "LIVE"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Troll Accelerationism symbol=tr/acc mc_source=dexscreener mc_usd=214345.0",
+      "observed_at": "2026-09-28T05:41:36.610933Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T05:41:36.610933Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T05:34:06.322247Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "organic_x",
+      "summary": "CA-scoped X: 5 recent mentions; organic_x=true (project @tracclol + scanners; non_farm); queried_at=2026-09-28T05:45Z",
+      "observed_at": "2026-09-28T05:45:49.898690Z",
+      "refs": [
+        "https://x.com/tracclol/status/2104443224060547392",
+        "https://x.com/SolPlayScanner/status/2104447119532683429"
+      ],
+      "weight": 0.85
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "1baf547e-20e3-41ef-ad0c-ebff991d1564",
+  "do_not_execute_until_armed": false
+}
