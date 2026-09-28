@@ -1,0 +1,56 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "ce7300c2-0168-4e59-aa7b-1a2c5bf023e2",
+  "action": "BUY",
+  "issued_at": "2026-09-28T11:03:25.600498Z",
+  "expires_at": "2026-09-28T11:23:25.600498Z",
+  "contract_address": "8zeFZ2777XA2q3MGpRiscEH4QhsU5SpKsJ49JCctpump",
+  "chain": "solana",
+  "ticker": "PUPP",
+  "confidence": 0.55,
+  "thesis": "pursue→BUY PUPP (quality gate pass)",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 45243.70686623547,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T11:01:07.659370Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=PuppyP symbol=PUPP mc_source=jupiter mc_usd=45243.70686623547",
+      "observed_at": "2026-09-28T11:03:23.687789Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T11:03:23.687789Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T11:01:07.659370Z",
+      "refs": [],
+      "weight": 0.6
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "2fccaa92-998e-4b0d-b830-df1943c1d20b",
+  "do_not_execute_until_armed": false
+}
