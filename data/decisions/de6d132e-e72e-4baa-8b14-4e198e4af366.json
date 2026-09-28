@@ -1,0 +1,72 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "de6d132e-e72e-4baa-8b14-4e198e4af366",
+  "action": "BUY",
+  "issued_at": "2026-09-28T08:20:10.598521Z",
+  "expires_at": "2026-09-28T08:40:10.598521Z",
+  "contract_address": "3wkvhVS8gmT3dSwVYpEwPaJcDjL839gYv9sAD4C2SbVQ",
+  "chain": "solana",
+  "ticker": "CORGI",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY CORGI organic_x clear; live MC~$46,937 holders=168",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 46937.40332834356,
+    "price_usd": 4.744436125457873e-05,
+    "liquidity_usd": 7902.710561164229,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T08:25:25.645658+00:00",
+    "holder_count": 168.0,
+    "mc_source": "jupiter",
+    "mc_status": "LIVE"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Corgicoin symbol=CORGI mc_source=jupiter mc_usd=17513.902580809052",
+      "observed_at": "2026-09-28T08:20:08.540277Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T08:20:08.540277Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T08:20:01.809734Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "x_social",
+      "summary": "organic_x CA-scoped posts matching_n=1 reasons=recent_ca_mention,non_farm_author",
+      "observed_at": "2026-09-28T08:25:25Z",
+      "refs": [
+        "https://x.com/dexpaidpanther/status/2104487237337465213"
+      ],
+      "weight": 0.8
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_clear",
+    "jacob_ping_quality"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "3cde0b12-d62a-4417-9f1f-4772ce64aab9",
+  "do_not_execute_until_armed": false,
+  "organic_x": true,
+  "ping_quality": true
+}

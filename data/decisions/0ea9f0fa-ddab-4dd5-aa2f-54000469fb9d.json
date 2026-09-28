@@ -1,0 +1,72 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "0ea9f0fa-ddab-4dd5-aa2f-54000469fb9d",
+  "action": "BUY",
+  "issued_at": "2026-09-28T08:20:22.609640Z",
+  "expires_at": "2026-09-28T08:40:22.609640Z",
+  "contract_address": "83eC1QKYnEVLgqoJKofABgMgZcRdq6KNVUbRogXJpump",
+  "chain": "solana",
+  "ticker": "Pool",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY Pool organic_x clear; live MC~$8,330 holders=83",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 8330.130156305144,
+    "price_usd": 8.330130156305143e-06,
+    "liquidity_usd": 5632.870013818732,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T08:25:25.855960+00:00",
+    "holder_count": 83.0,
+    "mc_source": "jupiter",
+    "mc_status": "LIVE"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Pool symbol=Pool mc_source=jupiter mc_usd=5629.787815184714",
+      "observed_at": "2026-09-28T08:20:20.702302Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T08:20:20.702302Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T08:20:01.809734Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "x_social",
+      "summary": "organic_x CA-scoped posts matching_n=1 reasons=recent_ca_mention,non_farm_author",
+      "observed_at": "2026-09-28T08:25:25Z",
+      "refs": [
+        "https://x.com/PoolFees/status/2104486144100782398"
+      ],
+      "weight": 0.8
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_clear",
+    "jacob_ping_quality"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "0ff5ca7b-2c4c-4b78-9c90-6ddb5e16805c",
+  "do_not_execute_until_armed": false,
+  "organic_x": true,
+  "ping_quality": true
+}
