@@ -125,6 +125,9 @@ def _refresh_watches_only(*, ledger: CandidateLedger, root: Path, live: bool) ->
         "oldest_watch_refresh_age_sec_all": fresh.get("oldest_watch_refresh_age_sec_all"),
         "jup_errors": fresh.get("jup_errors"),
         "jup_stats": fresh.get("jup_stats"),
+        "jup_single_stats": fresh.get("jup_single_stats"),
+        "refresh_mode": fresh.get("refresh_mode"),
+        "mc_source_counts": fresh.get("mc_source_counts"),
     }
 
 
@@ -434,6 +437,9 @@ def _write_cycle_heartbeat(
         if "jup_stats" in watch_summary:
             raw["watch_jup_stats"] = watch_summary.get("jup_stats")
             raw["watch_jup_errors"] = watch_summary.get("jup_errors")
+            raw["watch_jup_single_stats"] = watch_summary.get("jup_single_stats")
+            raw["watch_refresh_mode"] = watch_summary.get("refresh_mode")
+            raw["watch_mc_source_counts"] = watch_summary.get("mc_source_counts")
     if ingest_stats:
         raw["ingest"] = dict(ingest_stats)
         raw["cycle_duration_sec"] = ingest_stats.get("cycle_duration_sec")
@@ -457,6 +463,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     log.info("discovery runner mode=%s armed=%s live=%s", args.mode, is_armed(), args.live)
+    if not args.live and args.fixture_dir is None:
+        log.warning(
+            "discovery runner WITHOUT --live: WATCH MC refresh is offline (no Jupiter/pump/Dex "
+            "fetch, refresh ages grow, stale_watch_alert may trip). Use --live for the routine scan."
+        )
 
     def _cycle() -> list[dict]:
         return run_cycle(

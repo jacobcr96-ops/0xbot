@@ -32,6 +32,20 @@ unanswered + pump.fun empty + Dex *answered* with no usable pair) counts as
 ``no_mc_all_sources`` and closes after WATCH_DEAD_NULL_STREAK consecutive
 refreshes. If Dex also errors (429/network) it is an outage and never counts.
 
+Batch miss → single-mint retry: every buyable Solana WATCH (last known MC >=
+floor, or unknown) that the Jupiter batch did not quote with an MC is retried
+with a single-mint Jupiter query (buyable-first order, small gap between
+calls, fetch_jup_assets' 429 backoff / Retry-After). A buyable ``no_mc`` only
+counts toward ``watch_dead_streak`` / dead-close when that single-mint query
+also *answered* without an MC; a batch miss whose single-mint query errored
+(429/network) or was skipped (budget) never counts.
+
+Offline refresh (``live=False`` and no ``mc_fetcher``, e.g. ``runner once``
+without ``--live``) fetches nothing: it never records a dead signal, never
+advances or resets a streak, and marks ``refresh_mode="offline"`` in
+watch_freshness.json. (Before this guard an offline runner scored every WATCH
+as ``no_mc`` with empty ``mc_source_counts`` / ``jup_stats``.)
+
 Staleness scope: only buyable WATCHes (last known MC >= floor, or MC unknown)
 count toward ``watch_stale_count`` / ``stale_buyable`` / ``stale_watch_alert``
 and per-row ``stale``. Sub-floor WATCHes are still refreshed (buyable ones are
@@ -96,6 +110,11 @@ WATCH_DEAD_LAST_PRINT_STREAK = 2  # runner refreshes twice per cycle
 WATCH_DEAD_NULL_STREAK = 3
 WATCH_DEAD_MAX_HOLDERS = 1
 WATCH_DEAD_MAX_LIQ_USD = 100.0
+# Single-mint Jupiter retry for buyable WATCHes the batch missed.
+WATCH_SINGLE_RETRY_BUDGET_SEC = 25.0
+WATCH_SINGLE_RETRY_GAP_SEC = 0.15
+WATCH_SINGLE_RETRY_MAX_CONSEC_429 = 2
+WATCH_SINGLE_RETRY_TIMEOUT_SEC = 8.0
 DIP_BUY_PERCENT_EQUITY = max(0.75, float(MIN_BUY_PERCENT_EQUITY))
 DIP_BUY_TTL_SECONDS = BUY_ADD_TTL_SECONDS  # 1200
 DIP_BUY_CONFIDENCE = 0.55
@@ -689,6 +708,83 @@ def order_watches_for_refresh(
     return sorted(watches, key=key)
 
 
+def _jup_asset_has_mc(asset: Optional[dict[str, Any]]) -> bool:
+    if not isinstance(asset, dict):
+        return False
+    return _fnum(asset.get("mcap")) is not None or _fnum(asset.get("fdv")) is not None
+
+
+def retry_single_mint_jup(
+    mints: list[str],
+    *,
+    budget_sec: float = WATCH_SINGLE_RETRY_BUDGET_SEC,
+    gap_sec: float = WATCH_SINGLE_RETRY_GAP_SEC,
+    timeout_s: float = WATCH_SINGLE_RETRY_TIMEOUT_SEC,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any], list[str]]:
+    """Single-mint Jupiter queries (in the given priority order).
+
+    Returns (results, stats, errors). results[mint] = {"status", "asset",
+    "errors"} with status:
+      * "ok"             — Jupiter returned a row with an MC
+      * "answered_no_mc" — Jupiter answered (no error) but no row / no MC
+      * "error"          — request failed (429 after backoff, network, ...)
+    Mints not attempted (budget / repeated 429) are absent from results.
+    Each call goes through fetch_jup_assets (429: Retry-After floor +
+    exponential backoff + jitter, bounded).
+    """
+    results: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    stats: dict[str, Any] = {
+        "wanted": len(mints),
+        "attempted": 0,
+        "recovered": 0,
+        "answered_no_mc": 0,
+        "failed": 0,
+        "skipped": 0,
+        "http429": 0,
+        "wait_sec": 0.0,
+    }
+    if not mints:
+        return results, stats, errors
+    t0 = _enrich._monotonic()
+    consec_429 = 0
+    for i, ca in enumerate(mints):
+        elapsed = _enrich._monotonic() - t0
+        if elapsed > budget_sec or consec_429 >= WATCH_SINGLE_RETRY_MAX_CONSEC_429:
+            stats["skipped"] = len(mints) - i
+            stats["stopped"] = "budget" if elapsed > budget_sec else "http429"
+            break
+        if i and gap_sec > 0:
+            _enrich._sleep(gap_sec)
+        stats["attempted"] += 1
+        try:
+            assets, errs = fetch_jup_assets([ca], timeout=timeout_s)
+        except Exception as e:  # noqa: BLE001 — never let one mint blind the refresh
+            assets, errs = {}, [f"jup:{type(e).__name__}"]
+        st = dict(_enrich.JUP_LAST_STATS)
+        stats["http429"] += int(st.get("http429") or 0)
+        stats["wait_sec"] += float(st.get("wait_sec") or 0.0)
+        asset = assets.get(ca) if isinstance(assets, dict) else None
+        errs = list(errs or [])
+        if _jup_asset_has_mc(asset):
+            status = "ok"
+            stats["recovered"] += 1
+            consec_429 = 0
+        elif not errs:
+            status = "answered_no_mc"
+            stats["answered_no_mc"] += 1
+            consec_429 = 0
+        else:
+            status = "error"
+            stats["failed"] += 1
+            errors.extend(f"{ca[:8]}:{e}" for e in errs)
+            consec_429 = consec_429 + 1 if any("429" in e for e in errs) else 0
+        results[ca] = {"status": status, "asset": asset, "errors": errs}
+    stats["wait_sec"] = round(stats["wait_sec"], 3)
+    stats["elapsed_sec"] = round(_enrich._monotonic() - t0, 3)
+    return results, stats, errors
+
+
 def refresh_open_watches(
     *,
     ledger: Optional[CandidateLedger] = None,
@@ -737,6 +833,33 @@ def refresh_open_watches(
             elif jup_stats.get("http429"):
                 log.info("watch refresh: jupiter 429 recovered stats=%s", jup_stats)
 
+    # Batch miss → single-mint retry for buyable WATCHes (buyable-first order
+    # is preserved from ``watches``). Only an *answered* single-mint miss may
+    # count toward the dead streak of a buyable WATCH.
+    single_results: dict[str, dict[str, Any]] = {}
+    single_stats: dict[str, Any] = {}
+    single_errors: list[str] = []
+    if live and mc_fetcher is None and not skip_jup():
+        retry = []
+        for c in watches:
+            ca_c = (c.contract_address or "").strip()
+            if (
+                ca_c
+                and (c.chain or "solana").lower() == "solana"
+                and not ca_c.lower().startswith("0x")
+                and is_buyable_mc(get_mc_now(c), floor)
+                and not _jup_asset_has_mc(jup_map.get(ca_c))
+            ):
+                retry.append(ca_c)
+        if retry:
+            single_results, single_stats, single_errors = retry_single_mint_jup(retry)
+            log.warning(
+                "watch refresh: jupiter batch missed %d buyable watch(es); single-mint retry stats=%s errors=%s",
+                len(retry),
+                single_stats,
+                single_errors[:5],
+            )
+
     rows: list[dict[str, Any]] = []
     expired: list[dict[str, Any]] = []
     stale_count = 0  # buyable-only (alerting)
@@ -746,19 +869,38 @@ def refresh_open_watches(
     oldest_age: Optional[float] = None  # buyable-only
     oldest_age_all: Optional[float] = None
     source_counts: dict[str, int] = {}
+    fetch_path_counts: dict[str, int] = {}
+    dead_suppressed: list[dict[str, Any]] = []
     jup_outage = bool(mc_fetcher is None and live and jup_errors)
+    # live=False without a fetcher fetches nothing: no evidence either way.
+    offline = mc_fetcher is None and not live
+    if offline:
+        log.warning(
+            "watch refresh OFFLINE (live=False, e.g. runner without --live): no MC fetched; "
+            "dead streaks untouched, refresh ages will grow"
+        )
 
     for cand in watches:
         err = None
         prev_refreshed = get_refreshed_at(cand)
         ca = (cand.contract_address or "").strip()
+        was_buyable = is_buyable_mc(get_mc_now(cand), floor)
+        single = single_results.get(ca)
+        fetch_path: Optional[str] = None
         try:
             if mc_fetcher is None and live:
+                jup_asset = jup_map.get(ca)
+                fetch_path = "jup_batch" if _jup_asset_has_mc(jup_asset) else None
+                if single is not None and single.get("status") == "ok":
+                    jup_asset = single.get("asset")
+                    fetch_path = "jup_single"
+                elif single is not None and single.get("asset") is not None and jup_asset is None:
+                    jup_asset = single.get("asset")
                 res = fetch_mc_quote(
                     ca,
                     chain=cand.chain,
-                    jup_asset=jup_map.get(ca),
-                    try_jup=False,  # batch already covered Jupiter
+                    jup_asset=jup_asset,
+                    try_jup=False,  # batch (+ single-mint retry) already covered Jupiter
                 )
             else:
                 try:
@@ -777,10 +919,28 @@ def refresh_open_watches(
         # fetch must not close a real coin).
         extra0 = _cand_extra(cand)
         dead_kind: Optional[str] = None
-        if not price_live and err is None:
+        suppressed: Optional[str] = None
+        # Buyable WATCH + Jupiter live path: a null MC counts only when the
+        # single-mint query also answered without an MC.
+        jup_live_path = mc_fetcher is None and live and not skip_jup()
+        buyable_needs_single = (
+            jup_live_path
+            and was_buyable
+            and not _jup_asset_has_mc(jup_map.get(ca))
+            and (single is None or single.get("status") != "answered_no_mc")
+        )
+        if offline:
+            pass  # nothing fetched — no dead evidence
+        elif not price_live and err is None:
             if _is_last_print(q, now=now):
                 dead_kind = "last_print"
-            elif mc is None and (not jup_outage or ca in jup_map):
+            elif mc is None and buyable_needs_single:
+                suppressed = (
+                    "single_mint_not_tried"
+                    if single is None
+                    else f"single_mint_{single.get('status')}"
+                )
+            elif mc is None and (not jup_outage or ca in jup_map or single is not None):
                 # every source answered (Jupiter row had no MC / not indexed)
                 dead_kind = "no_mc"
             elif (
@@ -793,7 +953,15 @@ def refresh_open_watches(
                 # A Dex error (429/network) is an outage too → does not count.
                 dead_kind = "no_mc_all_sources"
         prev_streak = int(_fnum(extra0.get("watch_dead_streak")) or 0)
-        streak = prev_streak + 1 if dead_kind else 0
+        if offline or suppressed:
+            streak = prev_streak  # no evidence this refresh: neither advance nor reset
+        else:
+            streak = prev_streak + 1 if dead_kind else 0
+        if suppressed:
+            dead_suppressed.append(
+                {"ca": ca, "ticker": cand.ticker, "reason": suppressed,
+                 "single_errors": (single or {}).get("errors")}
+            )
         holders = q.get("holder_count")
         if holders is None:
             holders = extra0.get("holder_count")
@@ -887,6 +1055,8 @@ def refresh_open_watches(
             refreshed_at = now
             src = str(q.get("source") or "unknown")
             source_counts[src] = source_counts.get(src, 0) + 1
+            fp = fetch_path if src == "jupiter" and fetch_path else src
+            fetch_path_counts[fp] = fetch_path_counts.get(fp, 0) + 1
         else:
             refreshed_at = prev_refreshed
             # still track min from whatever we know
@@ -947,6 +1117,8 @@ def refresh_open_watches(
                 "fetch_error": err,
                 "dead_signal": dead_kind,
                 "dead_streak": streak,
+                "mc_fetch_path": (fetch_path or q.get("source")) if price_live else None,
+                "dead_signal_suppressed": suppressed,
             }
         )
 
@@ -969,9 +1141,15 @@ def refresh_open_watches(
         "stale_threshold_sec": WATCH_STALE_SEC,
         "expire_threshold_sec": WATCH_EXPIRE_SEC,
         "watch_expired_n": len(expired),
+        "refresh_mode": "offline" if offline else ("live" if mc_fetcher is None else "custom_fetcher"),
+        "live": bool(live),
         "mc_source_counts": source_counts,
+        "mc_fetch_path_counts": fetch_path_counts,
         "jup_errors": jup_errors,
         "jup_stats": jup_stats,
+        "jup_single_stats": single_stats,
+        "jup_single_errors": single_errors,
+        "dead_signal_suppressed": dead_suppressed,
         "skip_dex": skip_dex(),
         "armed": is_armed(),
         "watches": rows,
@@ -990,13 +1168,17 @@ def refresh_open_watches(
         oldest_watch_refresh_age_sec_all=oldest_age_all,
     )
     log.info(
-        "watch refresh n=%d stale_buyable=%d stale_subfloor=%d expired=%d oldest_age=%s sources=%s",
+        "watch refresh mode=%s n=%d stale_buyable=%d stale_subfloor=%d expired=%d oldest_age=%s "
+        "sources=%s paths=%s single=%s",
+        freshness["refresh_mode"],
         open_n,
         stale_count,
         stale_subfloor,
         len(expired),
         oldest_age,
         source_counts,
+        fetch_path_counts,
+        single_stats or None,
     )
     return freshness
 
@@ -1470,6 +1652,9 @@ def run_watch_escalate_cycle(
         "oldest_watch_refresh_age_sec_all": freshness.get("oldest_watch_refresh_age_sec_all"),
         "jup_errors": freshness.get("jup_errors"),
         "jup_stats": freshness.get("jup_stats"),
+        "jup_single_stats": freshness.get("jup_single_stats"),
+        "refresh_mode": freshness.get("refresh_mode"),
+        "mc_source_counts": freshness.get("mc_source_counts"),
         "watch_expired_n": freshness.get("watch_expired_n"),
         "expired": freshness.get("expired_this_cycle"),
         "oldest_watch_refresh_age_sec": freshness.get("oldest_watch_refresh_age_sec"),
