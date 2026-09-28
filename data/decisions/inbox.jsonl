@@ -9,3 +9,5 @@
 {"decision_id": "7632fdba-7a8c-4a65-ac10-ec950569466a", "ticker": "P/ACC", "ca": "FxChPUbJp9BhcphBFG8s225A821pbdfFyjNyRbyMpump", "action": "BUY", "issued_at": "2026-09-28T11:37:13.017054Z", "live_mc_usd": 82161.47426296817, "organic_x": true, "reason": "real_buy_organic_x", "published_at": "2026-09-28T11:42:26.172784+00:00"}
 {"decision_id":"a42b971f-a377-4073-9dc1-50c1d1507c38","action":"BUY","ticker":"Bipi","contract_address":"Ef4P1cmK9ot9pzQ9TfFczjKgs7qTpzYuHqQkRHj7pump","chain":"solana","mc_usd":35342.36770281681,"organic_x":true,"jacob_ping":true,"issued_at":"2026-09-28T12:39:42.377746Z","published_at":"2026-09-28T12:46:46.194156+00:00","note":"REAL_BUY memecoin-x-scan 2026-09-28T12:45Z"}
 {"decision_id":"8f0b2d21-f6f1-4766-9d35-ce90632651cf","action":"BUY","ticker":"OUTOFBAG"}
+{"decision_id":"9e72c0a0-5df8-47fd-985b-4d715bf3b947","action":"BUY","ticker":"e/dec","contract_address":"ATUKKEWhJaFar6K6b87fDoF62qD7rnuekpTViPRtYhQo","flags":["jacob_ping_real_buy"]}
+{"decision_id":"857cd516-ef7f-43b2-90d3-c18459b46850","action":"BUY","ticker":"MINEPAD","contract_address":"2EUKLvNQ63YCmjSDyJ14Tzj7ASeHGXgseYWrKAa2mine","flags":["jacob_ping_real_buy"]}

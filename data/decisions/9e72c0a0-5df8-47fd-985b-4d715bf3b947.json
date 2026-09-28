@@ -1,0 +1,80 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "9e72c0a0-5df8-47fd-985b-4d715bf3b947",
+  "action": "BUY",
+  "issued_at": "2026-09-28T15:03:06.017012Z",
+  "expires_at": "2026-09-28T15:23:06.017012Z",
+  "contract_address": "ATUKKEWhJaFar6K6b87fDoF62qD7rnuekpTViPRtYhQo",
+  "chain": "solana",
+  "ticker": "e/dec",
+  "confidence": 0.62,
+  "thesis": "pursue\u2192BUY e/dec organic_x clear \u2014 first-sight ~$15,696 \u2192 live MC~$53,763 holders=604 bonding-curve mc_rising; CA-scoped X posts=3 organic_x=True reasons=recent_ca_mention,non_farm_author \u2265$25k floor \u2014 REAL BUY jacob_ping",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 53762.56965315904,
+    "price_usd": 5.39792497498698e-05,
+    "liquidity_usd": 8582.133085734691,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "holders": 604.0,
+    "as_of": "2026-09-28T15:03:06.225276+00:00",
+    "mc_source": "jupiter",
+    "mc_usd_at_first_sight": 15696.127197848187
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Effective Decelerationism symbol=e/dec mc_source=jupiter mc_usd=15696.127197848187",
+      "observed_at": "2026-09-28T14:36:31.678945Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T14:36:31.678945Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T14:34:35.635323Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "organic_x",
+      "summary": "CA-scoped X posts=3 organic_x=True reasons=recent_ca_mention,non_farm_author matching_n=2 authors=['PeepRadars', 'solhousesignals', 'memecoin666_']",
+      "observed_at": "2026-09-28T15:03:06.017012+00:00",
+      "refs": [
+        "https://x.com/PeepRadars/status/2104581497445388620",
+        "https://x.com/solhousesignals/status/2104581401697775921",
+        "https://x.com/memecoin666_/status/2104581122340573353"
+      ],
+      "weight": 0.8
+    },
+    {
+      "channel": "live_quote",
+      "summary": "live jupiter MC~$53,763 holders=604 liq~$8,582 chg_1h~+923% complete=True",
+      "observed_at": "2026-09-28T15:03:06.017012+00:00",
+      "refs": [],
+      "weight": 0.7
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared",
+    "jacob_ping_real_buy"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "02579418-a535-48b8-b205-551a03dcdf9c",
+  "do_not_execute_until_armed": false,
+  "parent_decision_id": "b51f299c-fbff-4e94-888e-1ae1a534002c"
+}
