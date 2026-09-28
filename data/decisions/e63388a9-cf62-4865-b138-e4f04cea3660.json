@@ -1,0 +1,58 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "e63388a9-cf62-4865-b138-e4f04cea3660",
+  "action": "BUY",
+  "issued_at": "2026-09-28T10:26:27.005497Z",
+  "expires_at": "2026-09-28T10:46:27.005497Z",
+  "contract_address": "A6W4kpc1JTDVo3fVyuKbbPpZjaknuFTBXeBoQ3zapump",
+  "chain": "solana",
+  "ticker": "TRY",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY TRY + organic_x (@Try__sol CA mention) + live MC~$49.8k (first-sight ~$19.7k) holders=265 bonding early unique",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 49796.29596830303,
+    "price_usd": null,
+    "liquidity_usd": 11485.195147306149,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T10:31:33.606803+00:00"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=You get lucky when you try symbol=TRY mc_source=jupiter mc_usd=19671.598755584524",
+      "observed_at": "2026-09-28T10:26:25.191332Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T10:26:25.191332Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T10:26:21.111212Z",
+      "refs": [],
+      "weight": 0.6
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared",
+    "jacob_ping"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "816de453-7cdc-4fe6-95cb-cb0836ff2764",
+  "do_not_execute_until_armed": false
+}
