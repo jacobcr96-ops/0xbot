@@ -1,0 +1,56 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "2b03dfa7-c155-4652-9bfe-c605bd74fe19",
+  "action": "BUY",
+  "issued_at": "2026-09-28T06:55:08.771274Z",
+  "expires_at": "2026-09-28T07:15:08.771274Z",
+  "contract_address": "E4rpZNJxiAuTUhad4PonDruT7JzK9VzGbo7dLng1h5F7",
+  "chain": "solana",
+  "ticker": "CardPad",
+  "confidence": 0.55,
+  "thesis": "pursue→BUY CardPad (quality gate pass)",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 20604.39713057916,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T06:54:16.813305Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=CardPad symbol=CardPad mc_source=jupiter mc_usd=20604.39713057916",
+      "observed_at": "2026-09-28T06:55:07.144828Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T06:55:07.144828Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T06:54:16.813305Z",
+      "refs": [],
+      "weight": 0.6
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "f0646d30-e277-4d04-933a-1789f6801b0a",
+  "do_not_execute_until_armed": false
+}
