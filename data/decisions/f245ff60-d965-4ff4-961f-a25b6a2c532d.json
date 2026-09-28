@@ -1,0 +1,56 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "f245ff60-d965-4ff4-961f-a25b6a2c532d",
+  "action": "BUY",
+  "issued_at": "2026-09-28T04:51:31.870501Z",
+  "expires_at": "2026-09-28T05:11:31.870501Z",
+  "contract_address": "CXM6rNB6wtsUBswpj1ypYwR93jdwrzcvunENMqd8pump",
+  "chain": "solana",
+  "ticker": "NEARCAT",
+  "confidence": 0.55,
+  "thesis": "pursue→BUY NEARCAT (quality gate pass)",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 128911.65292598055,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T04:50:32.253323Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=NEARCAT symbol=NEARCAT mc_source=jupiter mc_usd=128911.65292598055",
+      "observed_at": "2026-09-28T04:51:30.320353Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T04:51:30.320353Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T04:50:32.253323Z",
+      "refs": [],
+      "weight": 0.6
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "e76f1594-7ae8-4d83-8f37-852db97c27a7",
+  "do_not_execute_until_armed": false
+}
