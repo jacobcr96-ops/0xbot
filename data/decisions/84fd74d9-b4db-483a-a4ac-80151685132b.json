@@ -1,0 +1,77 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "84fd74d9-b4db-483a-a4ac-80151685132b",
+  "action": "BUY",
+  "issued_at": "2026-09-28T00:51:36.037488Z",
+  "expires_at": "2026-09-28T01:11:36.037488Z",
+  "contract_address": "2kArRr59ECSyF6MfxFErZiRa3oeEBwKg3P6fPKeXpump",
+  "chain": "solana",
+  "ticker": "BEE",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY BEE BeeBrain organic_x cleared; first-sight ~$14.6k \u2192 live ~$9.1k; CA-mention thread (Pepepedroo/0xCalculated/eliq500/AntoniH95072)",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 14641.173171537957,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T00:40:28.940273Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=BeeBrain symbol=BEE mc_source=jupiter mc_usd=14641.173171537957",
+      "observed_at": "2026-09-28T00:51:34.773140Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T00:51:34.773140Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T00:40:28.940273Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "x_organic",
+      "summary": "organic_x=true: 7 CA posts; 4 non-farm authors in live discovery replies; solhousesignals excluded",
+      "observed_at": "2026-09-28T00:56:10.347023Z",
+      "refs": [
+        "https://x.com/0xCalculated/status/2104370967783113119",
+        "https://x.com/Pepepedroo/status/2104373303057985867"
+      ],
+      "weight": 0.7
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "512a6519-82bc-4159-bb7d-210d8ec0bb68",
+  "do_not_execute_until_armed": false,
+  "organic_x": true,
+  "organic_x_matching_n": 4,
+  "live_quote": {
+    "mc_usd": 9106.095733625987,
+    "source": "jupiter",
+    "fetched_at": "2026-09-28T00:55:52.660953+00:00",
+    "holder_count": 81.0,
+    "price_age_sec": 2,
+    "mc_status": "LIVE"
+  }
+}
