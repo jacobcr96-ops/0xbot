@@ -147,12 +147,14 @@ Treat FOMO/0xbot sidebar as a **lagging confirmation universe**. Tokens that app
 ## How to run
 
 ```bash
-make discovery-once          # one poll cycle (fixtures if not --live)
+make discovery-once          # one poll cycle (live when XINTEL_ARMED=true, else offline)
+make discovery-offline       # deliberate offline/fixture cycle (--offline)
 make discovery-validate      # write reports/early_discovery_validation_v0.md
 
 python -m x_intel.discovery.runner once
 python -m x_intel.discovery.runner loop --interval 30
-python -m x_intel.discovery.runner once --live   # public HTTP; still disarmed
+python -m x_intel.discovery.runner once --live      # force live (default when armed)
+python -m x_intel.discovery.runner once --offline   # force offline (alias --no-live)
 python -m x_intel.discovery.validate
 ```
 

@@ -3,6 +3,10 @@
 Usage:
   python -m x_intel.discovery.runner once
   python -m x_intel.discovery.runner loop --interval 30
+  python -m x_intel.discovery.runner once --offline   # deliberate offline/test run
+
+Live by default when XINTEL_ARMED=true (``--live`` still accepted);
+``--offline`` / ``--no-live`` forces offline; ``--fixture-dir`` defaults offline.
 """
 
 from __future__ import annotations
@@ -446,11 +450,51 @@ def _write_cycle_heartbeat(
     atomic_write_json(path, raw)
 
 
+def resolve_live(
+    *,
+    live_flag: bool = False,
+    offline_flag: bool = False,
+    fixture_dir: Optional[Path] = None,
+    armed: Optional[bool] = None,
+) -> tuple[bool, str]:
+    """CLI live/offline resolution → (live, reason).
+
+    Explicit ``--offline``/``--no-live`` wins, then explicit ``--live``; a
+    ``--fixture-dir`` replay defaults offline; otherwise live iff
+    ``XINTEL_ARMED=true`` (an armed routine must never run with an offline
+    WATCH refresh because someone forgot ``--live``).
+    """
+    if live_flag and offline_flag:
+        raise ValueError("--live and --offline/--no-live are mutually exclusive")
+    if offline_flag:
+        return False, "flag:--offline"
+    if live_flag:
+        return True, "flag:--live"
+    if fixture_dir is not None:
+        return False, "fixture_dir"
+    armed = is_armed() if armed is None else bool(armed)
+    if armed:
+        return True, "default:armed"
+    return False, "default:disarmed"
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Early-mover discovery runner (disarmed)")
     parser.add_argument("mode", choices=["once", "loop"], help="once=single cycle; loop=poll forever")
     parser.add_argument("--interval", type=float, default=30.0, help="loop interval seconds (default 30)")
-    parser.add_argument("--live", action="store_true", help="hit public HTTP endpoints (still disarmed)")
+    live_grp = parser.add_mutually_exclusive_group()
+    live_grp.add_argument(
+        "--live",
+        action="store_true",
+        help="hit public HTTP endpoints (default when XINTEL_ARMED=true)",
+    )
+    live_grp.add_argument(
+        "--offline",
+        "--no-live",
+        dest="offline",
+        action="store_true",
+        help="deliberate offline/fixture run: no live polls, WATCH refresh offline",
+    )
     parser.add_argument("--fixture-dir", type=Path, default=None)
     parser.add_argument("--data-dir", type=Path, default=None, help="override XINTEL_DATA_DIR")
     parser.add_argument("--no-emit", action="store_true", help="skip pursue→BUY disk emit")
@@ -462,16 +506,22 @@ def main(argv: Optional[list[str]] = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    log.info("discovery runner mode=%s armed=%s live=%s", args.mode, is_armed(), args.live)
-    if not args.live and args.fixture_dir is None:
+    live, live_reason = resolve_live(
+        live_flag=args.live, offline_flag=args.offline, fixture_dir=args.fixture_dir
+    )
+    log.info(
+        "discovery runner mode=%s armed=%s live=%s (%s)", args.mode, is_armed(), live, live_reason
+    )
+    if not live and args.fixture_dir is None:
         log.warning(
-            "discovery runner WITHOUT --live: WATCH MC refresh is offline (no Jupiter/pump/Dex "
-            "fetch, refresh ages grow, stale_watch_alert may trip). Use --live for the routine scan."
+            "discovery runner OFFLINE (%s): WATCH MC refresh fetches nothing (refresh ages grow, "
+            "stale_watch_alert may trip).",
+            live_reason,
         )
 
     def _cycle() -> list[dict]:
         return run_cycle(
-            live=args.live,
+            live=live,
             fixture_dir=args.fixture_dir,
             data_root=args.data_dir,
             emit_buy=not args.no_emit,

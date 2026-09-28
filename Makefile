@@ -1,4 +1,4 @@
-.PHONY: install test demo api mcp lint emit-buy ingest-reports ledger-status discovery-once discovery-validate
+.PHONY: install test demo api mcp lint emit-buy ingest-reports ledger-status discovery-once discovery-offline discovery-validate
 
 VENV ?= .venv
 PY := $(VENV)/bin/python
@@ -33,9 +33,13 @@ emit-buy:
 ingest-reports:
 	$(PY) -m x_intel.ledger.execution_reports
 
-# Early-mover discovery (fixture/replay by default; still disarmed)
+# Early-mover discovery: live when XINTEL_ARMED=true (runner default), else offline.
 discovery-once:
 	$(PY) -m x_intel.discovery.runner once
+
+# Deliberate offline/fixture run (no live polls; WATCH refresh offline)
+discovery-offline:
+	$(PY) -m x_intel.discovery.runner once --offline
 
 discovery-validate:
 	$(PY) -m x_intel.discovery.validate
