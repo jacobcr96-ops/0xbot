@@ -1,0 +1,80 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "e9e1d9bb-08c2-42f5-b8cd-ec30af8817f0",
+  "action": "BUY",
+  "issued_at": "2026-09-28T01:16:27.366634Z",
+  "expires_at": "2026-09-28T01:42:44.574Z",
+  "contract_address": "8c9rpLvnL7fN9Yjpk7TviSXongcgppcs4bN7n95qpump",
+  "chain": "solana",
+  "ticker": "cut",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY cut organic_x cleared; first-sight ~$19.2k \u2192 live ~$139.5k graduated; project @usecutfun CA post + GMGN echo",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 19249.678608877806,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T01:16:20.259304Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=cut symbol=cut mc_source=jupiter mc_usd=19249.678608877806",
+      "observed_at": "2026-09-28T01:16:26.020047Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T01:16:26.020047Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T01:16:20.259304Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "x_organic",
+      "summary": "organic_x=true: 2 CA posts; project @usecutfun launch + scanner echo; non-farm authors",
+      "observed_at": "2026-09-28T01:22:44.574874Z",
+      "refs": [
+        "https://x.com/usecutfun/status/2104379724730446190",
+        "https://x.com/DeepakC64722627/status/2104380463381139836"
+      ],
+      "weight": 0.7
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "fd5c0fde-7ecd-4733-9f6b-830947c00357",
+  "do_not_execute_until_armed": false,
+  "organic_x": true,
+  "organic_x_matching_n": 2,
+  "live_quote": {
+    "mc_usd": 139538.04741218677,
+    "source": "jupiter",
+    "fetched_at": "2026-09-28T01:22:44.542332+00:00",
+    "holder_count": 850.0,
+    "price_age_sec": 0,
+    "mc_status": "LIVE",
+    "complete": true,
+    "liq_usd": 15808.89953225883,
+    "chg_1h": 617.4531167002252
+  }
+}
