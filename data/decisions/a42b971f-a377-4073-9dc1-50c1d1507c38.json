@@ -1,0 +1,73 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "a42b971f-a377-4073-9dc1-50c1d1507c38",
+  "action": "BUY",
+  "issued_at": "2026-09-28T12:39:42.377746Z",
+  "expires_at": "2026-09-28T13:05:29.340Z",
+  "contract_address": "Ef4P1cmK9ot9pzQ9TfFczjKgs7qTpzYuHqQkRHj7pump",
+  "chain": "solana",
+  "ticker": "Bipi",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY Bipi + organic_x (@0xPapuEth ~29.5k foll CA post, Apu-KOL claim) + live MC~$35,342 holders=94.0 liq~$11,701; first-sight ~$12.3k \u2192 live ~$35,342 unique Bipi (bonding)",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 35342.36770281681,
+    "price_usd": 3.534236770281681e-05,
+    "liquidity_usd": 11701.438597778792,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "holder_count": 94.0,
+    "as_of": "2026-09-28T12:45:11.927918+00:00",
+    "source": "jupiter",
+    "mc_status": "LIVE"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Bipi symbol=Bipi mc_source=jupiter mc_usd=12346.774678837928",
+      "observed_at": "2026-09-28T12:39:40.409748Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T12:39:40.409748Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T12:39:34.515100Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "organic_x",
+      "summary": "CA-scoped X organic_x=True: 1 post (@0xPapuEth ~29.5k foll introducing $Bipi with CA); eval recent_ca_mention+non_farm_author",
+      "observed_at": "2026-09-28T12:45:29.340Z",
+      "refs": [
+        "https://x.com/0xPapuEth/status/2104551904017822198"
+      ],
+      "weight": 0.85
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared",
+    "jacob_ping_quality",
+    "above_25k_floor"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "3ddf166e-8d2b-4824-8af0-597a6414b1b1",
+  "do_not_execute_until_armed": false,
+  "organic_x": true,
+  "jacob_ping": true
+}
