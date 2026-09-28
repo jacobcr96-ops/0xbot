@@ -1,0 +1,56 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "5ba99cbf-7838-4bb9-b74c-55e53bd33d84",
+  "action": "BUY",
+  "issued_at": "2026-09-28T06:43:57.343162Z",
+  "expires_at": "2026-09-28T07:03:57.343162Z",
+  "contract_address": "BQTovtV9LiVG9odt5gCVBhpfkfwsn16z41UVr2cbUG31",
+  "chain": "solana",
+  "ticker": "NewGuy",
+  "confidence": 0.55,
+  "thesis": "pursue→BUY NewGuy (quality gate pass)",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 24863.322414033555,
+    "price_usd": null,
+    "liquidity_usd": null,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T06:42:50.039856Z"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=New guy kinda chill symbol=NewGuy mc_source=jupiter mc_usd=24863.322414033555",
+      "observed_at": "2026-09-28T06:43:55.779210Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T06:43:55.779210Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T06:42:50.039856Z",
+      "refs": [],
+      "weight": 0.6
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "5430f791-6e5c-453d-8b03-972298b1f5af",
+  "do_not_execute_until_armed": false
+}
