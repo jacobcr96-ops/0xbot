@@ -1,0 +1,74 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "7632fdba-7a8c-4a65-ac10-ec950569466a",
+  "action": "BUY",
+  "issued_at": "2026-09-28T11:37:13.017054Z",
+  "expires_at": "2026-09-28T12:02:26.172784Z",
+  "contract_address": "FxChPUbJp9BhcphBFG8s225A821pbdfFyjNyRbyMpump",
+  "chain": "solana",
+  "ticker": "P/ACC",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY P/ACC + organic_x (@pumpacc_sol project CA post) + live MC~$82,161 holders=536.0 liq~$11,520; first-sight ~$59k \u2192 live ~$82,161 unique Pump Accelerationism",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 82161.47426296817,
+    "price_usd": 8.479596725105603e-05,
+    "liquidity_usd": 11520.069625683158,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "holder_count": 536.0,
+    "as_of": "2026-09-28T11:42:26.341464+00:00",
+    "source": "jupiter",
+    "mc_status": "LIVE"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Pump Accelerationism symbol=P/ACC mc_source=jupiter mc_usd=59178.67585217267",
+      "observed_at": "2026-09-28T11:37:11.255326Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T11:37:11.255326Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T11:36:16.812140Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "organic_x",
+      "summary": "CA-scoped X organic_x=True: 2 posts (@pumpacc_sol project + @SolanaMemesScan); eval recent_ca_mention+non_farm_author",
+      "observed_at": "2026-09-28T11:42:26.172784Z",
+      "refs": [
+        "https://x.com/pumpacc_sol/status/2104535198390014360",
+        "https://x.com/SolanaMemesScan/status/2104535907789365498"
+      ],
+      "weight": 0.85
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared",
+    "jacob_ping_quality",
+    "above_25k_floor"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "71d7230c-2b16-435d-8ef1-8e02bb583ef3",
+  "do_not_execute_until_armed": false,
+  "organic_x": true,
+  "jacob_ping": true
+}
