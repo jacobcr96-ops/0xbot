@@ -1,0 +1,83 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "f1268fef-21cd-472c-952f-1be0d24e335e",
+  "action": "BUY",
+  "issued_at": "2026-09-28T02:20:39.053248Z",
+  "expires_at": "2026-09-28T02:40:39.053248Z",
+  "contract_address": "6ALx8vSoNyqdhE8gmVn1mk9LwfZfqkh68ps27zuk9tTz",
+  "chain": "solana",
+  "ticker": "AGENT",
+  "confidence": 0.72,
+  "thesis": "REAL_BUY AGENT organic_x CLEAR: 15 CA-scoped posts, multi-author non-farm (ej_sol09/dogetrumps/jeannslifestyle/Alexnd_r/liquidguap + project @Agent_OTC RTs); live MC~$20.7k jupiter early sub-$500k; bonding incomplete; 71 holders",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 20706.279024751235,
+    "price_usd": 2.0706279024751236e-05,
+    "liquidity_usd": 5520.762279159073,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T02:24:31.521745+00:00",
+    "source": "jupiter",
+    "holder_count": 71.0,
+    "mc_status": "LIVE"
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Agent OTC symbol=AGENT mc_source=jupiter mc_usd=21836.892292897966",
+      "observed_at": "2026-09-28T02:20:37.630040Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T02:20:37.630040Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T02:09:50.284938Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "x_organic",
+      "summary": "organic_x=true: 15 CA posts; multi-author non-farm (ej_sol09/dogetrumps/jeannslifestyle/Alexnd_r + @Agent_OTC RTs)",
+      "observed_at": "2026-09-28T02:25:19Z",
+      "refs": [
+        "https://x.com/ej_sol09/status/2104393304821674091",
+        "https://x.com/dogetrumps/status/2104394589700579779"
+      ],
+      "weight": 0.9
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "85d103cb-5545-48c4-80b5-f4b1efae72ed",
+  "do_not_execute_until_armed": false,
+  "organic_x": true,
+  "organic_x_matching_n": 15,
+  "live_quote": {
+    "mc_usd": 20706.279024751235,
+    "source": "jupiter",
+    "fetched_at": "2026-09-28T02:24:31.521745+00:00",
+    "holder_count": 71.0,
+    "price_age_sec": 0,
+    "mc_status": "LIVE",
+    "complete": false,
+    "liq_usd": 5520.762279159073,
+    "chg_1h": 159.44985320717163
+  }
+}
