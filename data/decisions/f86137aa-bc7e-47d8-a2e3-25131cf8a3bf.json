@@ -1,0 +1,77 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "f86137aa-bc7e-47d8-a2e3-25131cf8a3bf",
+  "action": "BUY",
+  "issued_at": "2026-09-28T15:28:48.779Z",
+  "expires_at": "2026-09-28T15:48:48.779Z",
+  "contract_address": "9pMXEbTjQ5HHiYifGbNBwkMkrQxGyhuSmB8ndKNXpump",
+  "chain": "solana",
+  "ticker": "SICAT",
+  "confidence": 0.6,
+  "thesis": "pursue\u2192BUY SICAT organic_x clear \u2014 first-sight ~$93,357 \u2192 live MC~$94,862 holders=170.0 graduated pump; CA-scoped X posts=1 organic_x=True reasons=recent_ca_mention,non_farm_author \u2265$25k floor \u2014 REAL BUY jacob_ping",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 94861.97265893809,
+    "price_usd": 9.806799079629137e-05,
+    "liquidity_usd": 13511.541845886839,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "holders": 170.0,
+    "as_of": "2026-09-28T15:28:48.755327+00:00",
+    "mc_source": "jupiter",
+    "mc_usd_at_first_sight": 93357.41004171317
+  },
+  "evidence": [
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Super Intelligent Cat symbol=SICAT mc_source=jupiter mc_usd=93357.41004171317",
+      "observed_at": "2026-09-28T15:24:36.007359Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T15:24:36.007359Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T15:22:54.215756Z",
+      "refs": [],
+      "weight": 0.6
+    },
+    {
+      "channel": "organic_x",
+      "summary": "CA-scoped X posts=1 organic_x=True reasons=recent_ca_mention,non_farm_author matching_n=1 authors=['sicatcoin']",
+      "observed_at": "2026-09-28T15:27:59.098634+00:00",
+      "refs": [
+        "https://x.com/sicatcoin/status/2104592306682880384"
+      ],
+      "weight": 0.8
+    },
+    {
+      "channel": "live_quote",
+      "summary": "live jupiter MC~$94,862 holders=170.0 liq~$13,512 chg_1h~95.62366331435952 complete=True",
+      "observed_at": "2026-09-28T15:28:48.755327+00:00",
+      "refs": [],
+      "weight": 0.7
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_clear",
+    "jacob_ping_real_buy"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "2d36fb2e-5369-4eb0-becb-35deacdcc6e0",
+  "do_not_execute_until_armed": false
+}
