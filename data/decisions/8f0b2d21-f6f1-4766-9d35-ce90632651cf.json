@@ -1,0 +1,68 @@
+{
+  "schema_version": "xintel.decision.v1",
+  "decision_id": "8f0b2d21-f6f1-4766-9d35-ce90632651cf",
+  "action": "BUY",
+  "issued_at": "2026-09-28T13:02:44.250071Z",
+  "expires_at": "2026-09-28T13:22:44.250071Z",
+  "contract_address": "GdCu4yCzAqishkVj7ntM8UGoa33zY9X6wiFcCnM3pump",
+  "chain": "solana",
+  "ticker": "OUTOFBAG",
+  "confidence": 0.55,
+  "thesis": "pursue\u2192BUY OUTOFBAG organic_x \u2014 first-sight ~$196k \u2192 live MC~$136k holders=775; CA-scoped X 1 post organic_x=True (@SolanaMemesScan) ABOVE $25k floor \u2014 REAL BUY jacob_ping (note: post flags top10/bundlers ~90%)",
+  "sizing_intent": {
+    "mode": "percent_equity",
+    "value": 1.0,
+    "max_slippage_bps": null,
+    "urgency": "normal"
+  },
+  "market_snapshot": {
+    "mc_usd": 136029.90208440294,
+    "price_usd": 0.00013761535612777858,
+    "liquidity_usd": 15520.430428384903,
+    "volume_1h_usd": null,
+    "pair_age_minutes": null,
+    "as_of": "2026-09-28T13:01:53.607250+00:00"
+  },
+  "evidence": [
+    {
+      "channel": "x_social",
+      "summary": "organic_x=True CA mention @SolanaMemesScan (recent_ca_mention, non_farm_author per gate); post notes top10/bundlers 90.1%",
+      "observed_at": "2026-09-28T13:02:44.250071Z",
+      "refs": [
+        "https://x.com/SolanaMemesScan/status/2104555312745271781"
+      ],
+      "weight": 0.7
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "identity name=Cat Out Of The Bag symbol=OUTOFBAG mc_source=dexscreener mc_usd=195734.0",
+      "observed_at": "2026-09-28T12:57:49.181363Z",
+      "refs": [],
+      "weight": 0.5
+    },
+    {
+      "channel": "cross_source",
+      "summary": "weak_narrative from pump/dex socials twitter=True telegram=False (not organic X posts)",
+      "observed_at": "2026-09-28T12:57:49.181363Z",
+      "refs": [],
+      "weight": 0.35
+    },
+    {
+      "channel": "launch_metrics",
+      "summary": "discovery source=pumpfun_curve first=pumpfun_curve",
+      "observed_at": "2026-09-28T12:56:15.242711Z",
+      "refs": [],
+      "weight": 0.6
+    }
+  ],
+  "risk_flags": [
+    "pursue_buy_emitter",
+    "publish_quality_pass",
+    "organic_x_cleared",
+    "jacob_ping",
+    "concentration_warning_top10_90pct"
+  ],
+  "experiment_id": "xintel_v0",
+  "candidate_id": "ac4e4ff4-2a4d-48df-8509-5bbb2bcafb04",
+  "do_not_execute_until_armed": false
+}
